@@ -75,6 +75,9 @@ export const ROLE_CAPABILITIES: Record<UserRole, ReadonlySet<string>> = {
 
 export function hasCapability(role: UserRole, capability: string): boolean {
   const caps = ROLE_CAPABILITIES[role];
+  if (!caps) return false;
+  
+  // Check for exact match or wildcard match
   if (caps.has(capability)) return true;
   const [domain] = capability.split(':');
   return caps.has(`${domain}:*`);

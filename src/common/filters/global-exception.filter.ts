@@ -6,7 +6,7 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import {
   ConflictError,
   DomainError,
@@ -20,11 +20,15 @@ import {
 } from '../errors/domain.errors';
 
 interface ApiErrorBody {
+  success: false;
+  statusCode: number;
+  message: string;
   error: {
     code: string;
-    message: string;
     details?: unknown;
   };
+  timestamp: string;
+  requestId: string;
 }
 
 @Catch()
@@ -33,26 +37,46 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
-    const response = ctx.getResponse<Response>();
+    const res = ctx.getResponse<Response>();
+    const req = ctx.getRequest<Request & { correlationId?: string }>();
 
-    const { status, body } = this.toResponse(exception);
+    const requestId =
+      req.correlationId ?? (req.headers['x-correlation-id'] as string) ?? 'N/A';
+    const timestamp = new Date().toISOString();
+
+    const { status, message, code, details } = this.toResponse(exception);
 
     if (status >= 500) {
       this.logger.error(
-        { err: exception, status },
+        { err: exception, status, requestId },
         exception instanceof Error ? exception.stack : 'Unknown error',
       );
     }
 
-    response.status(status).json(body);
+    const body: ApiErrorBody = {
+      success: false,
+      statusCode: status,
+      message,
+      error: { code, details },
+      timestamp,
+      requestId,
+    };
+
+    res.status(status).json(body);
   }
 
-  private toResponse(exception: unknown): { status: number; body: ApiErrorBody } {
+  private toResponse(exception: unknown): {
+    status: number;
+    message: string;
+    code: string;
+    details?: unknown;
+  } {
     if (exception instanceof DomainError) {
-      const status = this.statusForDomainError(exception);
       return {
-        status,
-        body: { error: { code: exception.code, message: exception.message, details: exception.details } },
+        status: this.statusForDomainError(exception),
+        message: exception.message,
+        code: exception.code,
+        details: exception.details,
       };
     }
 
@@ -62,21 +86,16 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       const message =
         typeof res === 'string'
           ? res
-          : (res as { message?: string | string[] }).message
-            ? Array.isArray((res as { message: string[] }).message)
-              ? (res as { message: string[] }).message.join('; ')
-              : ((res as { message: string }).message as string)
-            : exception.message;
-      const details = typeof res === 'object' ? res : undefined;
-      return {
-        status,
-        body: { error: { code: this.codeForStatus(status), message, details } },
-      };
+          : Array.isArray((res as { message?: string[] }).message)
+            ? (res as { message: string[] }).message.join('; ')
+            : ((res as { message?: string }).message ?? exception.message);
+      return { status, message, code: this.codeForStatus(status), details: typeof res === 'object' ? res : undefined };
     }
 
     return {
       status: HttpStatus.INTERNAL_SERVER_ERROR,
-      body: { error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } },
+      message: 'Internal server error',
+      code: 'INTERNAL_ERROR',
     };
   }
 

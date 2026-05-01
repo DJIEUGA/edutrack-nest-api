@@ -8,6 +8,7 @@ import { School } from '@modules/schools/domain/school.entity';
 import { SchoolMembership } from '@modules/schools/domain/school-membership.entity';
 import { RolesController } from './api/roles.controller';
 import { RoleResolverService } from './application/role-resolver.service';
+import { PermissionsService } from './application/permissions.service';
 import { RolesService } from './application/roles.service';
 import { TenantMembershipService } from './application/tenant-membership.service';
 import { UserRoleAssignment } from './domain/user-role.entity';
@@ -26,12 +27,21 @@ import { UserRoleRepository } from './infrastructure/user-role.repository';
   controllers: [RolesController],
   providers: [
     RolesService,
+    PermissionsService,
     RoleResolverService,
     TenantMembershipService,
     UserRoleRepository,
     RolesGuard,
     TenantGuard,
   ],
-  exports: [RoleResolverService, TenantMembershipService, RolesService, UserRoleRepository],
+  exports: [
+    RoleResolverService,
+    TenantMembershipService,
+    RolesService,
+    UserRoleRepository,
+    PermissionsService,
+    RolesGuard,
+    TenantGuard,
+  ],
 })
 export class RolesModule {}

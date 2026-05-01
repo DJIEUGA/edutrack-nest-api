@@ -109,6 +109,7 @@ export class InitialSchema1714248000000 implements MigrationInterface {
         user_id uuid not null references users(id) on delete cascade,
         school_id uuid not null references schools(id) on delete cascade,
         role user_role not null,
+        role_id uuid,
         department_id uuid,
         created_at timestamptz not null default now(),
         updated_at timestamptz not null default now(),
@@ -326,6 +327,51 @@ export class InitialSchema1714248000000 implements MigrationInterface {
       )
     `);
 
+    // Dynamic Roles
+    await queryRunner.query(`
+      create table roles (
+        id uuid primary key default gen_random_uuid(),
+        school_id uuid references schools(id) on delete cascade,
+        code text not null,
+        name text not null,
+        is_system boolean not null default false,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        unique (school_id, code)
+      )
+    `);
+
+    await queryRunner.query(`
+      create table role_permissions (
+        id uuid primary key default gen_random_uuid(),
+        role_id uuid not null references roles(id) on delete cascade,
+        permission_id uuid not null references permissions(id) on delete cascade,
+        created_at timestamptz not null default now(),
+        unique (role_id, permission_id)
+      )
+    `);
+
+    // Dynamic Permissions
+    await queryRunner.query(`
+      create table permissions (
+        id uuid primary key default gen_random_uuid(),
+        code text not null unique,
+        description text,
+        created_at timestamptz not null default now()
+      )
+    `);
+
+    await queryRunner.query(`
+      create table user_permissions (
+        id uuid primary key default gen_random_uuid(),
+        user_id uuid not null references users(id) on delete cascade,
+        school_id uuid references schools(id) on delete cascade,
+        permission_id uuid not null references permissions(id) on delete cascade,
+        created_at timestamptz not null default now(),
+        unique (user_id, school_id, permission_id)
+      )
+    `);
+
     // Audit
     await queryRunner.query(`
       create table audit_logs (
@@ -360,6 +406,7 @@ export class InitialSchema1714248000000 implements MigrationInterface {
     await queryRunner.query(
       `create index idx_timetable_slots_assignment on timetable_slots(course_assignment_id)`,
     );
+    await queryRunner.query(`create index idx_user_permissions_user on user_permissions(user_id, school_id)`);
     await queryRunner.query(
       `create index idx_sessions_assignment on sessions(course_assignment_id, scheduled_date)`,
     );
@@ -397,6 +444,10 @@ export class InitialSchema1714248000000 implements MigrationInterface {
       'attendance_records',
       'staff_invitations',
       'import_jobs',
+      'roles',
+      'role_permissions',
+      'permissions',
+      'user_permissions',
     ];
     for (const t of tablesWithUpdatedAt) {
       await queryRunner.query(

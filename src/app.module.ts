@@ -1,6 +1,7 @@
 import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { CacheModule } from '@nestjs/cache-manager';
 import { LoggerModule } from 'nestjs-pino';
 import { appConfig, databaseConfig, jwtConfig, throttleConfig } from './config/app.config';
 import { configValidationSchema } from './config/config.schema';
@@ -29,6 +30,10 @@ import { UsersModule } from './modules/users/users.module';
       load: [appConfig, databaseConfig, jwtConfig, throttleConfig],
       validationSchema: configValidationSchema,
       validationOptions: { allowUnknown: true, abortEarly: false },
+    }),
+    CacheModule.register({
+      isGlobal: true,
+      ttl: 300, // Cache TTL in seconds (e.g., 5 minutes)
     }),
     LoggerModule.forRoot({
       pinoHttp: {

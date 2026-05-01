@@ -1,18 +1,23 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsOptional, IsUUID } from 'class-validator';
-import { UserRole, USER_ROLES } from '@common/types/role.types';
+import { ApiProperty } from '@nestjs/swagger';
+import { IsEnum, IsNotEmpty, IsOptional, IsUUID } from 'class-validator';
+import { UserRole } from '@common/types/role.types';
 
 export class AssignRoleDto {
-  @ApiProperty()
+  @ApiProperty({ example: 'u-uuid-here' })
   @IsUUID()
+  @IsNotEmpty()
   userId!: string;
 
-  @ApiProperty({ enum: USER_ROLES })
-  @IsIn([...USER_ROLES])
+  @ApiProperty({ enum: ['owner', 'admin', 'lecturer', 'student', 'follower'] })
+  @IsEnum(['owner', 'admin', 'director', 'hod', 'lecturer', 'student', 'guardian', 'follower'])
   role!: UserRole;
 
-  @ApiPropertyOptional()
-  @IsOptional()
+  @ApiProperty({ description: 'Optional dynamic role ID', required: false })
   @IsUUID()
+  @IsOptional()
+  roleId?: string;
+
+  @IsUUID()
+  @IsOptional()
   departmentId?: string;
 }

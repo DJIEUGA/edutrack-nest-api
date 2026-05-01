@@ -15,19 +15,10 @@ export class UserRepository {
   }
 
   findByEmail(email: string): Promise<User | null> {
-    return this.repo.findOne({ where: { email: email.toLowerCase() } });
+    return this.repo.findOne({ where: { email } });
   }
 
-  async create(input: { email: string; passwordHash: string }): Promise<User> {
-    const user = this.repo.create({
-      email: input.email.toLowerCase(),
-      passwordHash: input.passwordHash,
-      isActive: true,
-    });
+  async save(user: User): Promise<User> {
     return this.repo.save(user);
-  }
-
-  async setActive(id: string, isActive: boolean): Promise<void> {
-    await this.repo.update({ id }, { isActive });
   }
 }
