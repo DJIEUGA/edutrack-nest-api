@@ -16,7 +16,7 @@ export class UsersService {
 
   async findByEmail(email: string) {
     const [user] = await this.dataSource.query(
-      'SELECT id, email, password_hash as "passwordHash", is_active as "isActive" FROM users WHERE email = $1',
+      'SELECT id, email, password_hash as "passwordHash", is_active as "isActive", is_system_admin as "isSystemAdmin" FROM users WHERE email = $1',
       [email],
     );
     return user;

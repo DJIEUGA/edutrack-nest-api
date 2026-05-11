@@ -1,264 +1,211 @@
-# Required API Endpoints for Frontend Integration
+# EduTrack API — Frontend Integration Reference
 
-> **Purpose:** This document lists API endpoints that the EduTrack frontend needs but that are absent from the current backend API guide. Each section describes what the frontend requires, why it needs it, and the expected request/response contract so the backend team can implement it.
+> **Audience:** Frontend engineers integrating with the EduTrack NestJS backend.
+> **Base URL:** `http://localhost:3001/api/v1` (dev) — set via `GLOBAL_PREFIX` in `.env`.
+> **Last updated:** 2026-05-11
 
 ---
 
-## 1. Departments — Update & Delete
+## Table of Contents
 
-### Why needed
-`DepartmentsPage` shows Edit and Delete buttons that are currently no-ops. Users expect to be able to rename or remove a department.
+1. [Global Concepts](#1-global-concepts)
+2. [Authentication](#2-authentication)
+3. [Multi-Tenancy Model](#3-multi-tenancy-model)
+4. [Profile (current user)](#4-profile-current-user)
+5. [Organizations](#5-organizations)
+6. [Schools](#6-schools)
+7. [Academic Structure](#7-academic-structure)
+8. [Users & Roles](#8-users--roles)
+9. [Attendance & Sessions](#9-attendance--sessions)
+10. [Timetable](#10-timetable)
+11. [Students](#11-students)
+12. [Venues](#12-venues)
+13. [Invitations](#13-invitations)
+14. [Import Jobs](#14-import-jobs)
+15. [Results](#15-results)
+16. [Reports](#16-reports)
+17. [Audit Logs](#17-audit-logs)
+18. [System Administration](#18-system-administration)
+19. [Known Gaps](#19-known-gaps)
 
-### 1.1 `PATCH /schools/:schoolId/departments/:departmentId`
+---
 
-🔒 👥 🛡 `owner, admin, director, hod`
+## 1. Global Concepts
 
-**Request:**
+### 1.1 Request Format
+
+All mutation requests must set:
+```
+Content-Type: application/json
+Authorization: Bearer <accessToken>
+```
+
+### 1.2 Standard Error Envelope
+
+Every error response — regardless of source — uses this shape:
+
 ```json
 {
-  "code": "CS",
-  "name": "Computer Science"
+  "success":    false,
+  "statusCode": 400,
+  "message":    "A record with this information already exists.",
+  "error": {
+    "code":    "CONFLICT",
+    "details": null
+  },
+  "timestamp": "2026-05-11T14:22:00.000Z",
+  "requestId": "req_abc123"
 }
 ```
 
-| Field | Type | Constraints |
+| `error.code` | HTTP status | When |
 |---|---|---|
-| `code` | `string?` | 2–32 characters; alphanumeric; unique within school |
-| `name` | `string?` | 2–200 characters |
+| `VALIDATION_ERROR` | 400 / 422 | DTO validation failed; `details` is a field→message map |
+| `CONFLICT` | 400 | Unique constraint violation (duplicate code, email, etc.) |
+| `VALIDATION` | 400 | Not-null constraint or business rule failure |
+| `UNAUTHORIZED` | 401 | Missing or invalid JWT |
+| `FORBIDDEN` | 403 | Authenticated but insufficient role / not in tenant |
+| `NOT_FOUND` | 404 | Resource not found |
+| `SCHEMA_MISMATCH` | 400 | Migrations not run — contact backend |
+| `DATABASE_ERROR` | 400 | Unexpected DB error |
+| `INTERNAL_SERVER_ERROR` | 500 | Unhandled server exception |
 
-**Response `data`:** Updated `ApiDepartment` object.
-
----
-
-### 1.2 `DELETE /schools/:schoolId/departments/:departmentId`
-
-🔒 👥 🛡 `owner, admin`
-
-**Response `data`:** `{ success: true }`
-
-> Backend should guard against deletion when the department still has active courses or enrolled students.
-
----
-
-## 2. Courses — Update & Delete
-
-### Why needed
-`CoursesPage` has Edit and Delete menu items that are currently no-ops.
-
-### 2.1 `PATCH /schools/:schoolId/courses/:courseId`
-
-🔒 👥 🛡 `owner, admin, hod`
-
-**Request:**
+**Tip:** On 400/422 with `VALIDATION_ERROR`, read `error.details` for per-field messages:
 ```json
 {
-  "code":         "CS301",
-  "title":        "Data Structures",
-  "unitLoad":     3,
-  "departmentId": "uuid"
-}
-```
-
-All fields optional. **Response `data`:** Updated `ApiCourse`.
-
----
-
-### 2.2 `DELETE /schools/:schoolId/courses/:courseId`
-
-🔒 👥 🛡 `owner, admin, hod`
-
-**Response `data`:** `{ success: true }`
-
-> Guard against deletion if active course assignments or timetable slots reference this course.
-
----
-
-## 3. Programs — Full CRUD
-
-### Why needed
-The frontend has a `ProgramsPage`, `ProgramDetailPage`, a `usePrograms` hook, and a `programsService` — but the backend API guide documents no `/programs` endpoint at all. The feature is complete on the frontend; it only needs corresponding backend routes.
-
-> **Note:** In the API guide, the closest concept is "classes" (`/schools/:schoolId/classes`). If programs are the same as classes, map accordingly. If they are distinct, implement them as described here.
-
-### 3.1 `GET /schools/:schoolId/programs`
-
-🔒 👥
-
-**Response `data`:**
-```json
-[
-  {
-    "id":            "uuid",
-    "schoolId":      "uuid",
-    "code":          "BSCS",
-    "name":          "Bachelor of Science in Computer Science",
-    "durationYears": 4,
-    "departmentId":  "uuid"
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "details": {
+      "email": "email must be an email",
+      "password": "password must be longer than or equal to 8 characters"
+    }
   }
-]
+}
 ```
 
-### 3.2 `POST /schools/:schoolId/programs`
+### 1.3 Successful Responses
 
-🔒 👥 🛡 `owner, admin, hod`
+Successful responses return the resource directly (not wrapped in a `data` envelope):
+```json
+{ "id": "uuid", "name": "...", ... }
+```
+or an array:
+```json
+[{ "id": "uuid" }, ...]
+```
+
+Deletes return either HTTP `204 No Content` or `{ "success": true }` — see each endpoint.
+
+### 1.4 Request ID
+
+Every response includes `requestId`. Include the value from `X-Request-Id` header in support tickets or error reports.
+
+### 1.5 Rate Limiting
+
+| Route | Limit |
+|---|---|
+| `POST /auth/login` | 10 requests / 60 s |
+| `POST /auth/refresh` | 20 requests / 60 s |
+| All other routes | 120 requests / 60 s |
+
+Exceeded limits → HTTP `429 Too Many Requests`.
+
+---
+
+## 2. Authentication
+
+### 2.1 Login
+
+```
+POST /auth/login
+```
+Public (no Authorization header needed).
 
 **Request:**
 ```json
 {
-  "code":          "BSCS",
-  "name":          "Bachelor of Science in Computer Science",
-  "durationYears": 4,
-  "departmentId":  "uuid"
+  "email":    "admin@school.edu",
+  "password": "MyPassword1!"
 }
 ```
 
-| Field | Type | Constraints |
+| Field | Type | Rules |
 |---|---|---|
-| `code` | `string` | 2–32 characters; unique within school |
-| `name` | `string` | 2–200 characters |
-| `durationYears` | `number` | Min 1 |
-| `departmentId` | `string?` | UUID |
+| `email` | `string` | Valid email |
+| `password` | `string` | Min 8 characters |
 
-**Response `data`:** `ApiProgram`
+**Response `200`:**
+```json
+{
+  "accessToken":      "eyJhbGci...",
+  "refreshToken":     "dGhpcyBp...",
+  "accessExpiresIn":  "15m",
+  "refreshExpiresIn": "7d"
+}
+```
 
-### 3.3 `PATCH /schools/:schoolId/programs/:programId`
-
-🔒 👥 🛡 `owner, admin, hod`
-
-Same fields as POST, all optional. **Response `data`:** `ApiProgram`
-
-### 3.4 `DELETE /schools/:schoolId/programs/:programId`
-
-🔒 👥 🛡 `owner, admin`
-
-**Response `data`:** `{ success: true }`
+> **Integration note:** Store `accessToken` in memory (not localStorage); store `refreshToken` in an HttpOnly cookie or secure storage. The access token expires after 15 minutes — use the refresh flow to get a new pair silently.
 
 ---
 
-## 4. Classes
+### 2.2 Refresh Tokens
 
-### Why needed
-`ApiCourseAssignment` references a `classId`. Students are enrolled into classes (e.g. "L300-A"). The frontend needs to list classes to populate dropdowns in the Course Assignment and Enrollment flows.
-
-### 4.1 `GET /schools/:schoolId/classes`
-
-🔒 👥
-
-**Response `data`:**
-```json
-[
-  {
-    "id":             "uuid",
-    "schoolId":       "uuid",
-    "academicYearId": "uuid",
-    "name":           "L300-A",
-    "programId":      "uuid",
-    "level":          3
-  }
-]
 ```
-
-### 4.2 `POST /schools/:schoolId/classes`
-
-🔒 👥 🛡 `owner, admin`
+POST /auth/refresh
+```
+Public.
 
 **Request:**
 ```json
-{
-  "academicYearId": "uuid",
-  "name":           "L300-A",
-  "programId":      "uuid",
-  "level":          3
-}
+{ "refreshToken": "dGhpcyBp..." }
 ```
 
-| Field | Type | Constraints |
-|---|---|---|
-| `academicYearId` | `string` | UUID |
-| `name` | `string` | Non-empty; unique within school+year |
-| `programId` | `string?` | UUID |
-| `level` | `number?` | Year/level integer |
+**Response `200`:** Same `TokenPair` shape as login.
 
-**Response `data`:** `ApiClass`
-
-### 4.3 `PATCH /schools/:schoolId/classes/:classId`
-
-🔒 👥 🛡 `owner, admin`
-
-Same shape as POST, all optional. **Response `data`:** `ApiClass`
-
-### 4.4 `DELETE /schools/:schoolId/classes/:classId`
-
-🔒 👥 🛡 `owner, admin`
-
-**Response `data`:** `{ success: true }`
+> Refresh tokens are rotated on every use — the old token is invalidated. If the call fails with `401`, send the user to the login screen.
 
 ---
 
-## 5. Semesters
+### 2.3 Logout
 
-### Why needed
-The `SchoolSettingsPage` Academic tab lets admin configure a "semester system". The app has a `useSemesters` hook and a `semesters.service.ts`. The API guide documents no semester endpoints.
-
-### 5.1 `GET /schools/:schoolId/semesters`
-
-🔒 👥
-
-**Response `data`:**
-```json
-[
-  {
-    "id":             "uuid",
-    "academicYearId": "uuid",
-    "name":           "First Semester",
-    "startDate":      "2025-09-01",
-    "endDate":        "2026-01-31",
-    "isCurrent":      true
-  }
-]
 ```
-
-### 5.2 `POST /schools/:schoolId/semesters`
-
-🔒 👥 🛡 `owner, admin`
+POST /auth/logout
+```
+🔒 Requires Authorization header.
 
 **Request:**
 ```json
-{
-  "academicYearId": "uuid",
-  "name":           "First Semester",
-  "startDate":      "2025-09-01",
-  "endDate":        "2026-01-31",
-  "isCurrent":      true
-}
+{ "refreshToken": "dGhpcyBp..." }
 ```
 
-| Field | Type | Constraints |
-|---|---|---|
-| `academicYearId` | `string` | UUID |
-| `name` | `string` | 2–64 characters |
-| `startDate` | `string` | ISO date; must be within parent academic year |
-| `endDate` | `string` | ISO date; after `startDate` |
-| `isCurrent` | `boolean?` | Only one semester per school can be current at a time |
-
-**Response `data`:** `ApiSemester`
-
-### 5.3 `PATCH /schools/:schoolId/semesters/:semesterId`
-
-🔒 👥 🛡 `owner, admin`
-
-Same fields, all optional. **Response `data`:** `ApiSemester`
+**Response `204`:** No body. The refresh token is revoked server-side.
 
 ---
 
-## 6. Self-Service Password Change
+### 2.4 Current User
 
-### Why needed
-`ProfileSettingsPage` has a full 3-step "Change password" UI (current → new → confirm) that is currently a no-op. The admin password-reset endpoint (`POST /schools/:schoolId/users/:userId/password-reset`) doesn't apply here — users changing their own password need a different flow.
+```
+GET /auth/me
+```
+🔒
 
-### `POST /auth/change-password`
+**Response `200`:**
+```json
+{
+  "id":      "uuid",
+  "email":   "admin@school.edu",
+  "profile": { "fullName": "Jane Doe", "phone": "...", "avatarUrl": null }
+}
+```
 
-🔒 — requires valid `Authorization` header
+---
+
+### 2.5 Change Own Password
+
+```
+PATCH /auth/change-password
+```
+🔒
 
 **Request:**
 ```json
@@ -268,100 +215,1124 @@ Same fields, all optional. **Response `data`:** `ApiSemester`
 }
 ```
 
-| Field | Type | Constraints |
+| Field | Type | Rules |
 |---|---|---|
-| `currentPassword` | `string` | Must match the user's stored password |
+| `currentPassword` | `string` | Must match stored hash |
 | `newPassword` | `string` | Min 8 characters |
 
-**Response `data`:** `{ success: true }`
+**Response `200`:** `{ "success": true }`
 
-**Error cases:**
-- `currentPassword` wrong → `error.code: 'VALIDATION'`, message: `"Current password is incorrect"`
+**Error:** Wrong current password → `400 VALIDATION` — _"Current password is incorrect"_
 
 ---
 
-## 7. Organization Update
+## 3. Multi-Tenancy Model
 
-### Why needed
-`OrganizationProfilePage` and `OrgAdminPage` let owners rename/rebrand their organization, but there is no PATCH endpoint in the guide.
+EduTrack uses a two-level tenant hierarchy:
 
-### `PATCH /organizations/:organizationId`
+```
+Organization (e.g. "University of Accra")
+  └─ School (e.g. "School of Engineering")
+       └─ Users, Courses, Sessions, etc.
+```
 
-🔒 👥 (org-scoped) 🛡 `owner`
+- A user belongs to an organization via `organization_memberships`.
+- A user belongs to a school via `school_memberships` and has one or more roles in `user_roles`.
+- All school-scoped endpoints require the user to be a member of that school (enforced by `TenantGuard`).
+- Role-gated endpoints are labelled with the minimum role(s) required.
+
+**Auth token only contains `userId` and `email`.** The backend resolves roles at request time from the database — there is no role claim in the JWT.
+
+---
+
+## 4. Profile (Current User)
+
+Base: `/profiles`
+
+### 4.1 Get My Profile
+
+```
+GET /profiles/me
+```
+🔒
+
+**Response:**
+```json
+{
+  "id":        "uuid",
+  "fullName":  "Jane Doe",
+  "phone":     "+233 30 123 4567",
+  "avatarUrl": "https://cdn.example.com/avatars/jane.jpg"
+}
+```
+
+---
+
+### 4.2 Update My Profile
+
+```
+PATCH /profiles/me
+```
+🔒
+
+**Request (all optional):**
+```json
+{
+  "fullName": "Jane K. Doe",
+  "phone":    "+233 30 987 6543"
+}
+```
+
+| Field | Rules |
+|---|---|
+| `fullName` | 1–200 characters |
+| `phone` | Max 32 characters |
+
+**Response:** Updated profile object.
+
+---
+
+### 4.3 Set / Remove Avatar
+
+```
+POST   /profiles/me/avatar
+DELETE /profiles/me/avatar
+```
+🔒
+
+**POST request:**
+```json
+{ "avatarUrl": "https://cdn.example.com/avatars/jane.jpg" }
+```
+The frontend uploads the image to your CDN first, then sends the resulting URL here.
+
+**POST response:** Updated profile.
+**DELETE response:** `{ "success": true }`
+
+---
+
+## 5. Organizations
+
+Base: `/organizations`
+
+### 5.1 List My Organizations
+
+```
+GET /organizations
+```
+🔒
+
+Returns only organizations the authenticated user belongs to.
+
+**Response:** `ApiOrganization[]`
+```json
+[
+  {
+    "id":      "uuid",
+    "name":    "University of Accra",
+    "code":    "uoa",
+    "logoUrl": null
+  }
+]
+```
+
+---
+
+### 5.2 Create Organization
+
+```
+POST /organizations
+```
+🔒
 
 **Request:**
 ```json
 {
-  "name":    "New Org Name",
-  "logoUrl": "https://cdn.example.com/logos/org.png"
+  "name":    "University of Accra",
+  "code":    "uoa",
+  "logoUrl": null
 }
 ```
 
-| Field | Type | Constraints |
+| Field | Type | Rules |
 |---|---|---|
-| `name` | `string?` | 2–200 characters |
-| `code` | `string?` | 2–64 characters; globally unique |
+| `name` | `string` | 2–200 characters |
+| `code` | `string` | 2–64 characters; lowercase alphanumeric |
 | `logoUrl` | `string?` | Valid URL |
 
-**Response `data`:** `ApiOrganization`
+**Response:** Created `ApiOrganization`.
 
 ---
 
-## 8. Student Attendance Summary (Aggregated)
+### 5.3 Get Organization
 
-### Why needed
-`AttendancePage` (admin/lecturer view) currently shows per-session attendance records only. The "At Risk (<75%)" card and the per-student attendance rate table require an aggregated summary across all sessions.
+```
+GET /organizations/:organizationId
+```
+🔒 Must be a member of the organization.
 
-### `GET /schools/:schoolId/students/:studentId/attendance/summary`
+**Response:** `ApiOrganization`.
 
-🔒 👥 🛡 `owner, admin, director, lecturer`
+---
 
-**Query params:**
+### 5.4 Update Organization
 
-| Param | Type | Description |
-|---|---|---|
-| `academicYearId` | `string?` | Filter by academic year |
+```
+PATCH /organizations/:organizationId
+```
+🔒 Role: `owner`
 
-**Response `data`:**
+**Request (all optional):**
 ```json
 {
-  "studentId":      "uuid",
-  "totalSessions":  24,
-  "present":        18,
-  "late":            3,
-  "absent":          2,
-  "excused":         1,
-  "attendanceRate": 87.5
+  "name":    "University of Ghana",
+  "code":    "uog",
+  "logoUrl": "https://cdn.example.com/logos/uog.png"
 }
 ```
 
-Alternatively, include summary fields on the existing `/students/:studentId/attendance` response via `?aggregate=true`.
+**Response:** Updated `ApiOrganization`.
 
 ---
 
-## 9. Attendance Summary for All Students in a Session/School
+### 5.5 Delete Organization
 
-### Why needed
-`AttendancePage` overview table needs per-student attendance rates across all sessions — not just for one session.
+```
+DELETE /organizations/:organizationId
+```
+🔒 Role: `owner`
 
-### `GET /schools/:schoolId/attendance/summary`
+**Response:** `{ "success": true }`
 
-🔒 👥 🛡 `owner, admin, director, lecturer`
+> Soft-delete — sets `status: 'deleted'`. Historical data is preserved.
 
-**Query params:**
+---
+
+## 6. Schools
+
+### 6.1 List Schools
+
+```
+GET /organizations/:organizationId/schools
+```
+🔒 Must be an org member.
+
+**Query params (all optional):**
 
 | Param | Type | Description |
 |---|---|---|
-| `academicYearId` | `string?` | Filter by academic year |
-| `sessionId` | `string?` | Narrow to a specific session |
+| `status` | `'active' \| 'inactive'` | Filter by status |
+| `q` | `string` | Full-text search on name or code |
 
-**Response `data`:**
+**Example:** `GET /organizations/uuid/schools?status=active&q=engineering`
+
+**Response:** `ApiSchool[]`
+```json
+[
+  {
+    "id":     "uuid",
+    "name":   "School of Engineering",
+    "code":   "soe",
+    "status": "active",
+    "address": null,
+    "phone":   null,
+    "email":   null,
+    "website": null,
+    "logoUrl": null,
+    "timezone": null,
+    "sessionDurationMinutes": null,
+    "lateThresholdMinutes":   null,
+    "requireGeoCheckin": false,
+    "allowLateCheckin":  false
+  }
+]
+```
+
+---
+
+### 6.2 Create School
+
+```
+POST /organizations/:organizationId/schools
+```
+🔒 Role: `owner, admin`
+
+**Request:**
+```json
+{
+  "name": "School of Engineering",
+  "code": "soe"
+}
+```
+
+| Field | Rules |
+|---|---|
+| `name` | 2–200 characters |
+| `code` | 2–64 characters; lowercase alphanumeric |
+
+**Response:** Created `ApiSchool`.
+
+---
+
+### 6.3 Get School (org-scoped)
+
+```
+GET /organizations/:organizationId/schools/:schoolId
+```
+🔒 Must be a school member.
+
+**Response:** `ApiSchool`.
+
+---
+
+### 6.4 Get School (direct lookup — no org prefix)
+
+```
+GET /schools/:schoolId
+```
+🔒 Must be a school member.
+
+Same response shape as 6.3. Use this when `organizationId` is not available in the route context (e.g., school workspace layout).
+
+---
+
+### 6.5 Update School
+
+```
+PATCH /organizations/:organizationId/schools/:schoolId
+```
+🔒 Role: `owner, admin`
+
+**Request (all fields optional):**
+```json
+{
+  "name":                    "School of Engineering",
+  "status":                  "active",
+  "address":                 "123 University Ave, Accra",
+  "phone":                   "+233 30 123 4567",
+  "email":                   "soe@uni.edu.gh",
+  "website":                 "https://soe.uni.edu.gh",
+  "logoUrl":                 "https://cdn.example.com/logos/soe.png",
+  "timezone":                "Africa/Accra",
+  "sessionDurationMinutes":  60,
+  "lateThresholdMinutes":    15,
+  "requireGeoCheckin":       true,
+  "allowLateCheckin":        false
+}
+```
+
+| Field | Type | Rules |
+|---|---|---|
+| `name` | `string?` | 2–200 characters |
+| `status` | `'active' \| 'inactive'?` | — |
+| `address` | `string?` | Max 500 characters |
+| `phone` | `string?` | Max 32 characters |
+| `email` | `string?` | Valid email |
+| `website` | `string?` | Valid URL |
+| `logoUrl` | `string?` | Valid URL |
+| `timezone` | `string?` | IANA timezone, e.g. `"Africa/Accra"` |
+| `sessionDurationMinutes` | `number?` | 5–480 |
+| `lateThresholdMinutes` | `number?` | Min 1 |
+| `requireGeoCheckin` | `boolean?` | Enforce geofence check-in |
+| `allowLateCheckin` | `boolean?` | Accept marks after session start |
+
+**Response:** Updated `ApiSchool`.
+
+---
+
+### 6.6 School Logo
+
+```
+POST   /organizations/:organizationId/schools/:schoolId/logo
+DELETE /organizations/:organizationId/schools/:schoolId/logo
+```
+🔒 Role: `owner, admin`
+
+**POST request:**
+```json
+{ "logoUrl": "https://cdn.example.com/logos/soe.png" }
+```
+
+Upload the image to your CDN first; send only the URL here.
+
+**POST / DELETE response:** Updated `ApiSchool` with the new `logoUrl` (or `null` on DELETE).
+
+---
+
+### 6.7 Delete School
+
+```
+DELETE /organizations/:organizationId/schools/:schoolId
+```
+🔒 Role: `owner`
+
+**Response:** `{ "success": true }`
+
+---
+
+## 7. Academic Structure
+
+All routes in this section are school-scoped: `🔒 Must be a school member.`
+
+---
+
+### 7.1 Academic Years
+
+Base: `/schools/:schoolId/academic-years`
+
+#### List
+
+```
+GET /schools/:schoolId/academic-years
+```
+
+**Response:**
+```json
+[
+  {
+    "id":        "uuid",
+    "schoolId":  "uuid",
+    "name":      "2024-2025",
+    "startDate": "2024-09-01",
+    "endDate":   "2025-07-31",
+    "isActive":  true
+  }
+]
+```
+
+#### Create
+
+```
+POST /schools/:schoolId/academic-years
+```
+Role: `owner, admin`
+
+```json
+{
+  "name":      "2024-2025",
+  "startDate": "2024-09-01",
+  "endDate":   "2025-07-31",
+  "isActive":  true
+}
+```
+
+| Field | Rules |
+|---|---|
+| `name` | 2–64 characters |
+| `startDate` | ISO date (`YYYY-MM-DD`) |
+| `endDate` | ISO date; must be after `startDate` |
+| `isActive` | `boolean?` — only one active year per school |
+
+**Response:** Created academic year.
+
+#### Update
+
+```
+PATCH /schools/:schoolId/academic-years/:academicYearId
+```
+Role: `owner, admin` — same fields, all optional.
+
+> **Gap:** DELETE is not yet implemented. To deactivate a year, PATCH `isActive: false`.
+
+---
+
+### 7.2 Departments
+
+Base: `/schools/:schoolId/departments`
+
+#### List
+```
+GET /schools/:schoolId/departments
+```
+**Response:**
+```json
+[{ "id": "uuid", "schoolId": "uuid", "code": "GI", "name": "Génie Informatique" }]
+```
+
+#### Create
+```
+POST /schools/:schoolId/departments
+```
+Role: `owner, admin`
+
+```json
+{ "code": "GI", "name": "Génie Informatique" }
+```
+
+| Field | Rules |
+|---|---|
+| `code` | 2–32 characters; alphanumeric; unique within school |
+| `name` | 2–200 characters |
+
+#### Update
+```
+PATCH /schools/:schoolId/departments/:departmentId
+```
+Role: `owner, admin, director, hod` — fields same as POST, all optional.
+
+#### Delete
+```
+DELETE /schools/:schoolId/departments/:departmentId
+```
+Role: `owner, admin` — **Response:** `{ "success": true }`
+
+---
+
+### 7.3 Programs
+
+Base: `/schools/:schoolId/programs`
+
+#### List
+```
+GET /schools/:schoolId/programs
+```
+**Response:**
+```json
+[
+  {
+    "id":            "uuid",
+    "schoolId":      "uuid",
+    "code":          "BTS-GI",
+    "name":          "BTS Génie Informatique",
+    "durationYears": 2,
+    "departmentId":  "uuid"
+  }
+]
+```
+
+#### Create
+```
+POST /schools/:schoolId/programs
+```
+Role: `owner, admin, hod`
+
+```json
+{
+  "code":          "BTS-GI",
+  "name":          "BTS Génie Informatique",
+  "durationYears": 2,
+  "departmentId":  "uuid"
+}
+```
+
+| Field | Rules |
+|---|---|
+| `code` | 2–32 characters; alphanumeric; unique within school |
+| `name` | 2–200 characters |
+| `durationYears` | Integer, min 1 |
+| `departmentId` | `string?` UUID |
+
+#### Update
+```
+PATCH /schools/:schoolId/programs/:programId
+```
+Role: `owner, admin, hod` — same fields, all optional.
+
+#### Delete
+```
+DELETE /schools/:schoolId/programs/:programId
+```
+Role: `owner, admin` — **Response:** `{ "success": true }`
+
+---
+
+### 7.4 Courses
+
+Base: `/schools/:schoolId/courses`
+
+#### List
+```
+GET /schools/:schoolId/courses
+```
+**Response:**
+```json
+[
+  {
+    "id":           "uuid",
+    "schoolId":     "uuid",
+    "code":         "INFO101",
+    "title":        "Introduction à la Programmation",
+    "unitLoad":     4,
+    "departmentId": "uuid"
+  }
+]
+```
+
+#### Create
+```
+POST /schools/:schoolId/courses
+```
+Role: `owner, admin, hod`
+
+```json
+{
+  "code":         "INFO101",
+  "title":        "Introduction à la Programmation",
+  "unitLoad":     4,
+  "departmentId": "uuid"
+}
+```
+
+| Field | Rules |
+|---|---|
+| `code` | 2–32 characters; alphanumeric; unique within school |
+| `title` | 2–200 characters |
+| `unitLoad` | `integer?` min 1, default 2 |
+| `departmentId` | `string?` UUID |
+
+#### Update
+```
+PATCH /schools/:schoolId/courses/:courseId
+```
+Role: `owner, admin, hod` — same fields, all optional.
+
+#### Delete
+```
+DELETE /schools/:schoolId/courses/:courseId
+```
+Role: `owner, admin, hod` — **Response:** `{ "success": true }`
+
+---
+
+### 7.5 Classes
+
+Base: `/schools/:schoolId/classes`
+
+#### List
+```
+GET /schools/:schoolId/classes?academicYearId=uuid
+```
+
+`academicYearId` is optional but recommended to narrow results.
+
+**Response:**
+```json
+[
+  {
+    "id":             "uuid",
+    "schoolId":       "uuid",
+    "academicYearId": "uuid",
+    "programId":      "uuid",
+    "specialtyId":    "uuid",
+    "name":           "BTS-GI/DEV-LOG — L1",
+    "level":          1
+  }
+]
+```
+
+#### Create
+```
+POST /schools/:schoolId/classes
+```
+Role: `owner, admin, hod`
+
+```json
+{
+  "academicYearId": "uuid",
+  "name":           "BTS-GI/DEV-LOG — L1",
+  "programId":      "uuid",
+  "specialtyId":    "uuid",
+  "level":          1
+}
+```
+
+| Field | Rules |
+|---|---|
+| `academicYearId` | Required UUID |
+| `name` | 1–100 characters; unique within school+year |
+| `programId` | `string?` UUID |
+| `specialtyId` | `string?` UUID |
+| `level` | `integer?` min 1 |
+
+#### Update
+```
+PATCH /schools/:schoolId/classes/:classId
+```
+Role: `owner, admin` — `name`, `programId`, `level` — all optional.
+
+#### Delete
+```
+DELETE /schools/:schoolId/classes/:classId
+```
+Role: `owner, admin` — **Response:** `{ "success": true }`
+
+---
+
+### 7.6 Semesters
+
+Base: `/schools/:schoolId/semesters`
+
+#### List
+```
+GET /schools/:schoolId/semesters?academicYearId=uuid
+```
+
+`academicYearId` is **required** — the API will not return results without it.
+
+**Response:**
+```json
+[
+  {
+    "id":             "uuid",
+    "academicYearId": "uuid",
+    "name":           "Semestre 1",
+    "startDate":      "2024-09-01",
+    "endDate":        "2025-01-31",
+    "isCurrent":      true
+  }
+]
+```
+
+#### Create
+```
+POST /schools/:schoolId/semesters
+```
+Role: `owner, admin`
+
+```json
+{
+  "academicYearId": "uuid",
+  "name":           "Semestre 1",
+  "startDate":      "2024-09-01",
+  "endDate":        "2025-01-31",
+  "isCurrent":      false
+}
+```
+
+| Field | Rules |
+|---|---|
+| `academicYearId` | Required UUID |
+| `name` | 2–64 characters |
+| `startDate` | ISO date; within the parent academic year's range |
+| `endDate` | ISO date; after `startDate` |
+| `isCurrent` | `boolean?` — setting `true` auto-unsets any other current semester |
+
+#### Update
+```
+PATCH /schools/:schoolId/semesters/:semesterId
+```
+Role: `owner, admin` — same fields, all optional.
+
+> **Gap:** DELETE semester is not yet implemented.
+
+---
+
+### 7.7 Specialties
+
+Base: `/schools/:schoolId/specialties`
+
+#### List
+```
+GET /schools/:schoolId/specialties?programId=uuid
+```
+`programId` is optional.
+
+**Response:**
+```json
+[{ "id": "uuid", "schoolId": "uuid", "programId": "uuid", "code": "DEV-LOG", "name": "Développement Logiciel" }]
+```
+
+#### Create
+```
+POST /schools/:schoolId/specialties/programs/:programId
+```
+Role: `owner, admin, hod`
+
+```json
+{ "code": "DEV-LOG", "name": "Développement Logiciel" }
+```
+
+---
+
+### 7.8 Program Levels
+
+Base: `/schools/:schoolId/programs/:programId/levels`
+
+#### List
+```
+GET /schools/:schoolId/programs/:programId/levels
+```
+
+#### Create
+```
+POST /schools/:schoolId/programs/:programId/levels
+```
+Role: `owner, admin, hod`
+
+```json
+{ "level": 1, "name": "Niveau 1 — Première Année" }
+```
+
+| Field | Rules |
+|---|---|
+| `level` | Integer, min 1 |
+| `name` | 1–100 characters |
+
+---
+
+### 7.9 Course Assignments
+
+Links a course, class, lecturer, and academic year.
+
+Base: `/schools/:schoolId/course-assignments`
+
+#### List
+```
+GET /schools/:schoolId/course-assignments?lecturerUserId=uuid&academicYearId=uuid
+```
+Both query params are optional.
+
+#### Create
+```
+POST /schools/:schoolId/course-assignments
+```
+Role: `owner, admin, hod`
+
+```json
+{
+  "courseId":        "uuid",
+  "classId":         "uuid",
+  "lecturerUserId":  "uuid",
+  "academicYearId":  "uuid"
+}
+```
+
+All fields required UUIDs.
+
+---
+
+## 8. Users & Roles
+
+### 8.1 List Users
+
+```
+GET /schools/:schoolId/users
+```
+🔒 Role: `owner, admin, director`
+
+**Response:**
+```json
+[
+  {
+    "id":       "uuid",
+    "email":    "user@school.edu",
+    "isActive": true,
+    "fullName": "Jean-Baptiste Nkolo",
+    "phone":    "+237677000001",
+    "avatarUrl": null,
+    "joinedAt": "2024-09-01T00:00:00.000Z",
+    "roles": [
+      { "role": "owner", "departmentId": null }
+    ]
+  }
+]
+```
+
+---
+
+### 8.2 Search Users
+
+```
+GET /schools/:schoolId/users/search
+```
+🔒 Role: `owner, admin, director`
+
+**Query params:**
+
+| Param | Type | Default |
+|---|---|---|
+| `q` | `string?` | — (search email and full name) |
+| `role` | `UserRole?` | — (filter by role) |
+| `limit` | `number?` | 20 |
+| `offset` | `number?` | 0 |
+
+**Response:**
+```json
+{
+  "items": [ /* UserListItemDto[] */ ],
+  "meta":  { "total": 42, "limit": 20, "offset": 0 }
+}
+```
+
+---
+
+### 8.3 Get User
+
+```
+GET /schools/:schoolId/users/:userId
+```
+🔒 Role: `owner, admin, director` — same shape as list item.
+
+---
+
+### 8.4 Create User
+
+```
+POST /schools/:schoolId/users
+```
+🔒 Role: `owner, admin`
+
+```json
+{
+  "email":    "newuser@school.edu",
+  "fullName": "Ama Boateng",
+  "role":     "lecturer",
+  "password": "TempPass#1"
+}
+```
+
+| Field | Rules |
+|---|---|
+| `email` | Valid email |
+| `fullName` | Non-empty string |
+| `role` | One of: `owner \| admin \| director \| hod \| lecturer \| student \| guardian \| follower` |
+| `password` | `string?` min 8 — if omitted, a random password is generated |
+
+> If the email already exists on the platform, the user is linked to the school without creating a new account (no duplicate users). The call fails if they are already a member of this school.
+
+**Response:** Created `UserListItemDto`.
+
+---
+
+### 8.5 Update User
+
+```
+PATCH /schools/:schoolId/users/:userId
+```
+🔒 Role: `owner, admin`
+
+```json
+{
+  "fullName": "Ama K. Boateng",
+  "phone":    "+233 55 123 4567",
+  "isActive": false
+}
+```
+All fields optional. **Response:** Updated `UserListItemDto`.
+
+---
+
+### 8.6 Remove User from School
+
+```
+DELETE /schools/:schoolId/users/:userId
+```
+🔒 Role: `owner, admin`
+
+Removes school membership — does not delete the global account. **Response:** `{ "success": true }`
+
+---
+
+### 8.7 Admin Password Reset
+
+```
+POST /schools/:schoolId/users/:userId/password-reset
+```
+🔒 Role: `owner, admin`
+
+```json
+{ "password": "NewTemp#Pass1" }
+```
+
+**Response:** `{ "success": true }`
+
+---
+
+### 8.8 Role Assignment
+
+Base: `/schools/:schoolId/user-roles`
+
+#### List roles for a user
+```
+GET /schools/:schoolId/user-roles/:userId
+```
+Role: `owner, admin, director`
+
+**Response:**
+```json
+[{ "role": "hod", "departmentId": "uuid" }]
+```
+
+#### Assign role
+```
+POST /schools/:schoolId/user-roles
+```
+Role: `owner, admin`
+
+```json
+{
+  "userId":       "uuid",
+  "role":         "hod",
+  "departmentId": "uuid"
+}
+```
+
+| Field | Rules |
+|---|---|
+| `userId` | UUID |
+| `role` | `UserRole` enum |
+| `roleId` | `string?` UUID — for dynamic roles |
+| `departmentId` | `string?` UUID |
+
+#### Revoke role
+```
+DELETE /schools/:schoolId/user-roles/:userId/:role
+```
+Role: `owner, admin` — **Response:** HTTP `204`
+
+---
+
+### 8.9 Permissions
+
+```
+GET  /schools/:schoolId/user-roles/permissions/catalog   → All permissions
+POST /schools/:schoolId/user-roles/permissions           → Create permission (owner only)
+POST /schools/:schoolId/user-roles/:userId/permissions   → Assign to user
+DELETE /schools/:schoolId/user-roles/:userId/permissions/:permissionCode
+GET  /schools/:schoolId/user-roles/roles/catalog         → Dynamic roles for school
+POST /schools/:schoolId/user-roles/roles                 → Create dynamic role
+POST /schools/:schoolId/user-roles/permissions/bulk-assign-role
+```
+
+**Create permission request:**
+```json
+{ "code": "report:export", "description": "Can export reports" }
+```
+`code` must follow `domain:action` format.
+
+**Assign permission request body:** `{ "permissionCode": "report:export" }`
+
+**Bulk-assign permission to role:**
+```json
+{ "role": "lecturer", "permissionCode": "attendance:mark" }
+```
+
+---
+
+## 9. Attendance & Sessions
+
+### 9.1 Sessions
+
+Base: `/schools/:schoolId/sessions`
+
+#### List sessions
+```
+GET /schools/:schoolId/sessions
+```
+🔒 All roles (including student, guardian).
+
+#### Create session
+```
+POST /schools/:schoolId/sessions
+```
+Role: `owner, admin, hod`
+
+```json
+{
+  "courseAssignmentId": "uuid",
+  "timetableSlotId":    "uuid",
+  "scheduledDate":      "2025-10-01"
+}
+```
+
+#### Start session
+```
+POST /schools/:schoolId/sessions/:sessionId/start
+```
+Role: `owner, admin, lecturer`
+
+```json
+{ "lat": 5.6037, "lng": -0.1870, "accuracy": 10 }
+```
+Sets status to `live` and records geolocation.
+
+#### End session
+```
+POST /schools/:schoolId/sessions/:sessionId/end
+```
+Role: `owner, admin, lecturer` — no body. Sets status to `ended`.
+
+---
+
+### 9.2 Mark Attendance
+
+```
+POST /schools/:schoolId/sessions/:sessionId/attendance
+```
+🔒 Role: `lecturer, admin, owner`
+
+```json
+{
+  "studentId": "uuid",
+  "status":    "present"
+}
+```
+
+`status` values: `present | absent | late | excused`
+
+**Response:** Created `AttendanceRecord`.
+
+---
+
+### 9.3 Bulk Mark Attendance
+
+```
+POST /schools/:schoolId/sessions/:sessionId/attendance/bulk
+```
+Role: `lecturer, admin, owner`
+
+```json
+{
+  "entries": [
+    { "studentId": "uuid-1", "status": "present" },
+    { "studentId": "uuid-2", "status": "absent"  }
+  ]
+}
+```
+
+**Response:** `AttendanceRecord[]`
+
+---
+
+### 9.4 Get Attendance for a Session
+
+```
+GET /schools/:schoolId/sessions/:sessionId/attendance
+```
+🔒 All school members.
+
+---
+
+### 9.5 Get Attendance for a Student
+
+```
+GET /schools/:schoolId/students/:studentId/attendance
+```
+🔒 All school members.
+
+---
+
+### 9.6 Attendance Summary — All Students
+
+```
+GET /schools/:schoolId/attendance/summary
+```
+Role: `owner, admin, director, lecturer`
+
+**Query params (optional):**
+
+| Param | Description |
+|---|---|
+| `academicYearId` | Filter by year |
+| `sessionId` | Narrow to a single session |
+
+**Response:**
 ```json
 [
   {
     "studentId":     "uuid",
     "fullName":      "Kofi Atta",
-    "matricNo":      "UG/CS/2023/001",
+    "matricNo":      "IUT-GI-2024-001",
     "present":        18,
     "late":            3,
     "absent":          2,
@@ -374,47 +1345,353 @@ Alternatively, include summary fields on the existing `/students/:studentId/atte
 
 ---
 
-## 10. Reports — Enrollment & Attendance Trends
+### 9.7 Attendance Summary — Single Student
 
-### Why needed
-`ReportsPage` currently shows hardcoded chart data. The geo-compliance report endpoint exists (`GET /schools/:schoolId/reports/sessions/geo-compliance`), but enrollment and attendance trend data need dedicated endpoints.
+```
+GET /schools/:schoolId/students/:studentId/attendance/summary
+```
+Role: `owner, admin, director, lecturer`
 
-### 10.1 `GET /schools/:schoolId/reports/enrollment`
+**Query params:** `academicYearId?`
 
-🔒 👥 🛡 `owner, admin, director`
-
-**Query params:**
-
-| Param | Type | Default |
-|---|---|---|
-| `academicYearId` | `string?` | Current year |
-
-**Response `data`:**
+**Response:**
 ```json
 {
-  "totalStudents":    150,
-  "approved":         130,
-  "pending":           12,
-  "rejected":           5,
-  "waitlisted":         3,
+  "studentId":      "uuid",
+  "totalSessions":  24,
+  "present":        18,
+  "late":            3,
+  "absent":          2,
+  "excused":         1,
+  "attendanceRate": 87.5
+}
+```
+
+---
+
+## 10. Timetable
+
+Base: `/schools/:schoolId/timetable`
+
+### List slots
+```
+GET /schools/:schoolId/timetable
+```
+🔒 All school roles (including student, guardian).
+
+### Create slot
+```
+POST /schools/:schoolId/timetable
+```
+Role: `owner, admin, hod`
+
+```json
+{
+  "academicYearId":      "uuid",
+  "courseAssignmentId":  "uuid",
+  "dayOfWeek":           1,
+  "startTime":           "08:00",
+  "endTime":             "10:00",
+  "venue":               "Hall A"
+}
+```
+
+| Field | Rules |
+|---|---|
+| `dayOfWeek` | 0 (Sun) – 6 (Sat) |
+| `startTime` | `HH:MM` format |
+| `endTime` | `HH:MM` format; after `startTime` |
+| `venue` | `string?` |
+
+### Update slot
+```
+PATCH /schools/:schoolId/timetable/:slotId
+```
+Role: `owner, admin, hod` — same fields, all optional.
+
+### Delete slot
+```
+DELETE /schools/:schoolId/timetable/:slotId
+```
+Role: `owner, admin, hod` — **Response:** deleted slot object.
+
+---
+
+## 11. Students
+
+Base: `/schools/:schoolId/students`
+
+### List students
+```
+GET /schools/:schoolId/students
+```
+🔒 Role: `owner, admin, director`
+
+**Query params (all optional):**
+
+| Param | Description |
+|---|---|
+| `status` | `'approved' \| 'rejected' \| 'waitlisted'` |
+| `programId` | Filter by program |
+| `level` | Filter by class level |
+| `limit` | Default unset |
+| `offset` | Default 0 |
+
+### Get student
+```
+GET /schools/:schoolId/students/:studentId
+```
+Role: `owner, admin, director, lecturer`
+
+### Enroll student
+```
+POST /schools/:schoolId/students
+```
+Role: `owner, admin`
+
+```json
+{
+  "userId":   "uuid",
+  "matricNo": "IUT-GI-2024-001",
+  "classId":  "uuid"
+}
+```
+
+### Update student status
+```
+PATCH /schools/:schoolId/students/:studentId
+```
+Role: `owner, admin`
+
+```json
+{
+  "status":           "approved",
+  "rejectionReason":  null
+}
+```
+`status` values: `approved | rejected | waitlisted`
+
+### Remove student
+```
+DELETE /schools/:schoolId/students/:studentId
+```
+Role: `owner, admin` — **Response:** deleted student object.
+
+---
+
+### 11.1 Guardian — Linked Students
+
+```
+GET /schools/:schoolId/guardians/me/students
+```
+🔒 Must be authenticated as a guardian in that school.
+
+**Response:**
+```json
+[
+  {
+    "studentId": "uuid",
+    "fullName":  "Kofi Atta",
+    "matricNo":  "IUT-GI-2024-001",
+    "classId":   "uuid"
+  }
+]
+```
+
+---
+
+## 12. Venues
+
+Base: `/schools/:schoolId/venues`
+
+### List
+```
+GET /schools/:schoolId/venues
+```
+Role: `owner, admin, director, hod, lecturer`
+
+**Response:**
+```json
+[{ "id": "uuid", "name": "Amphi A", "latitude": 3.848, "longitude": 11.502 }]
+```
+
+### Create
+```
+POST /schools/:schoolId/venues
+```
+Role: `owner, admin`
+
+```json
+{
+  "name":      "Amphi A",
+  "latitude":  3.848,
+  "longitude": 11.502
+}
+```
+
+`latitude` and `longitude` are optional — required only if `requireGeoCheckin` is enabled on the school.
+
+### Update
+```
+PATCH /schools/:schoolId/venues/:venueId
+```
+Role: `owner, admin` — same fields, all optional.
+
+### Delete
+```
+DELETE /schools/:schoolId/venues/:venueId
+```
+Role: `owner, admin` — **Response:** deleted venue object.
+
+---
+
+## 13. Invitations
+
+### List invitations
+```
+GET /schools/:schoolId/invitations
+```
+Role: `owner, admin`
+
+### Send invitation
+```
+POST /schools/:schoolId/invitations
+```
+Role: `owner, admin`
+
+```json
+{
+  "email":        "newstaff@school.edu",
+  "role":         "lecturer",
+  "departmentId": "uuid"
+}
+```
+
+`departmentId` is optional — required only for `hod` role.
+
+### Cancel invitation
+```
+DELETE /schools/:schoolId/invitations/:invitationId
+```
+Role: `owner, admin`
+
+### Accept invitation (public)
+
+```
+POST /invitations/accept/:token
+```
+No Authorization header required.
+
+**Response:** `{ "success": true, "user": { ... } }`
+
+> The token is included in the invitation email link. If the email is new to the platform, the account is created automatically with a temporary password. The frontend should redirect to the change-password flow after acceptance.
+
+---
+
+## 14. Import Jobs
+
+Base: `/schools/:schoolId/imports`
+
+Used to bulk-import data (students, users, etc.) via a file URL.
+
+### List jobs
+```
+GET /schools/:schoolId/imports
+```
+Role: `owner, admin, director`
+
+### Create job
+```
+POST /schools/:schoolId/imports
+```
+Role: `owner, admin`
+
+```json
+{
+  "type":          "students",
+  "sourceFileUrl": "https://cdn.example.com/uploads/students.csv"
+}
+```
+
+### Get job (with validation details)
+```
+GET /schools/:schoolId/imports/:importId
+```
+Role: `owner, admin`
+
+### Commit job
+```
+POST /schools/:schoolId/imports/:importId/commit
+```
+Role: `owner, admin` — applies the validated import to the database.
+
+### Delete / cancel job
+```
+DELETE /schools/:schoolId/imports/:importId
+```
+Role: `owner, admin`
+
+---
+
+## 15. Results
+
+### Submit bulk results
+```
+POST /schools/:schoolId/results/bulk
+```
+Role: `lecturer, admin, owner`
+
+Accepts a grades payload (consult results service for exact shape).
+
+### Get student results
+```
+GET /schools/:schoolId/students/:studentId/results
+```
+🔒 All school members.
+
+**Query params:** `academicYearId?`
+
+---
+
+## 16. Reports
+
+Base: `/schools/:schoolId/reports`
+
+Role for all: `owner, admin, director`
+
+### Geo-compliance (sessions)
+```
+GET /schools/:schoolId/reports/sessions/geo-compliance
+```
+**Query params:** `limit?`, `offset?`
+
+### Enrollment report
+```
+GET /schools/:schoolId/reports/enrollment
+```
+**Query params:** `academicYearId?` (defaults to current year)
+
+**Response:**
+```json
+{
+  "totalStudents": 150,
+  "approved":      130,
+  "pending":        12,
+  "rejected":        5,
+  "waitlisted":      3,
   "byDepartment": [
-    { "departmentId": "uuid", "name": "Computer Science", "count": 60 }
+    { "departmentId": "uuid", "name": "Génie Informatique", "count": 60 }
   ]
 }
 ```
 
-### 10.2 `GET /schools/:schoolId/reports/attendance`
+### Attendance trend report
+```
+GET /schools/:schoolId/reports/attendance
+```
+**Query params:** `academicYearId?`, `period?: 'week' | 'month'` (default `'week'`)
 
-🔒 👥 🛡 `owner, admin, director`
-
-**Query params:**
-
-| Param | Type | Default |
-|---|---|---|
-| `academicYearId` | `string?` | Current year |
-| `period` | `'week' \| 'month'?` | `'week'` |
-
-**Response `data`:**
+**Response:**
 ```json
 {
   "averageRate": 87.3,
@@ -428,340 +1705,109 @@ Alternatively, include summary fields on the existing `/students/:studentId/atte
 
 ---
 
-## 11. Venue Management
+## 17. Audit Logs
 
-### Why needed
-The existing API guide documents venues but the frontend has no venue management UI yet. When the `SchoolSetupWizard` needs to assign a venue to a timetable slot, it requires:
-
-- `GET /schools/:schoolId/venues` (already documented ✓)
-- `POST /schools/:schoolId/venues` (already documented ✓)
-- `PATCH /schools/:schoolId/venues/:venueId` (already documented ✓)
-- `DELETE /schools/:schoolId/venues/:venueId` (already documented ✓)
-
-**Frontend action needed:** Build a `VenuesPage` and wire to the existing service layer.
-
----
-
-## 12. School Setup Wizard — Initial Structure Creation
-
-### Why needed
-`SchoolSetupWizard.tsx` currently uses `createDepartment` and `createProgram` from `mock-db`. It needs to call real endpoints to create the initial departments and programs immediately after school creation.
-
-All required endpoints already exist:
-- `POST /schools/:schoolId/departments` ✓
-- `POST /schools/:schoolId/programs` (blocked — see §3 above)
-- `POST /schools/:schoolId/academic-years` ✓
-
-**Frontend action needed:** Replace `mock-db` calls in `SchoolSetupWizard` with the service layer once the Programs endpoint is available. Departments and Academic Years can be wired now.
-
----
-
-## 13. Guardian — Linked Students
-
-### Why needed
-The `guardian` role can view linked students' timetable and attendance. There is no documented endpoint to fetch which students a guardian is linked to.
-
-### `GET /schools/:schoolId/guardians/me/students`
-
-🔒 👥 — must be authenticated as a guardian
-
-**Response `data`:**
-```json
-[
-  {
-    "studentId": "uuid",
-    "fullName":  "Kofi Atta",
-    "matricNo":  "UG/CS/2023/001",
-    "classId":   "uuid"
-  }
-]
 ```
-
----
-
-## 14. Invitation Accept — Account Setup
-
-### Why needed
-`AcceptInvitation.tsx` calls `POST /invitations/accept/:token`. When a new user (no existing account) accepts, the backend must either:
-
-a. Return a temporary token for the new user to set their password, OR  
-b. Create the account with a generated temporary password and return tokens directly.
-
-The API guide says the response is `{ success: true } or user object depending on whether account creation is needed`, which is ambiguous. Clarify:
-
-**Option A (Recommended):** If the invited email has no account:
-```json
-{
-  "requiresAccountSetup": true,
-  "setupToken":           "otp_xyz..."
-}
+GET /schools/:schoolId/audit-logs
 ```
+🔒 Role: `owner, admin, director`
 
-Then provide: `POST /invitations/setup-account`
-```json
-{
-  "setupToken": "otp_xyz...",
-  "password":   "NewPass#1",
-  "fullName":   "Ama Boateng"
-}
-```
-Returns `{ accessToken, refreshToken }`.
+**Query params:**
 
-**Option B:** Auto-create the account and return tokens directly:
-```json
-{
-  "accessToken":  "eyJ...",
-  "refreshToken": "eyJ..."
-}
-```
+| Param | Default |
+|---|---|
+| `page` | 1 |
+| `pageSize` | 20 |
 
-Frontend `AcceptInvitation.tsx` currently handles both but needs the contract finalized.
-
----
-
-## 15. Schools — Extended CRUD
-
-### Current API state
-
-| Operation | Endpoint | Status |
-|---|---|---|
-| Create | `POST /organizations/:orgId/schools` | ✅ Exists — fields: `name`, `code` |
-| Read list | `GET /organizations/:orgId/schools` | ✅ Exists |
-| Read single | `GET /organizations/:orgId/schools/:schoolId` | ✅ Exists |
-| Update | `PATCH /organizations/:orgId/schools/:schoolId` | ⚠️ Partial — only `name` and `status` |
-| Delete | `DELETE /organizations/:orgId/schools/:schoolId` | ❌ Missing |
-| Filter / search | Query params on list endpoint | ❌ Missing |
-| Extended settings | Extended PATCH fields | ❌ Missing |
-| Logo management | Upload / remove logo | ❌ Missing |
-
----
-
-### 15.1 `DELETE /organizations/:organizationId/schools/:schoolId`
-
-🔒 👥 🛡 `owner`
-
-**Why needed:** `SchoolSettingsPage` danger zone and the org admin panel need a way to remove a school.
-
-**Response `data`:** `{ success: true }`
-
-> **Recommendation:** Implement as a soft-delete — set `status: 'deleted'` and hide from lists — rather than a hard DELETE, to preserve historical attendance, session, and grade records. Alternatively, the existing `PATCH status: 'inactive'` already achieves deactivation; this endpoint handles permanent removal.
-
-**Error cases:**
-- School has active students or live sessions → `error.code: 'INVALIDSTATETRANSITION'`, message: `"School has active records and cannot be deleted"`
-
----
-
-### 15.2 `PATCH /organizations/:organizationId/schools/:schoolId` — Extended Fields
-
-🔒 👥 🛡 `owner, admin`
-
-**Why needed:** The current PATCH only accepts `name` and `status`. `SchoolSettingsPage` has a General tab with address, contact details, and branding — none of which can be saved.
-
-**Extended request body** (all fields optional, extend the existing DTO):
-
-```json
-{
-  "name":          "School of Engineering",
-  "status":        "active",
-  "address":       "123 University Ave, Accra",
-  "phone":         "+233 30 123 4567",
-  "email":         "school@uni.edu.gh",
-  "website":       "https://soe.uni.edu.gh",
-  "logoUrl":       "https://cdn.example.com/logos/soe.png",
-  "timezone":      "Africa/Accra",
-  "sessionDurationMinutes": 60,
-  "lateThresholdMinutes":   15,
-  "requireGeoCheckin":      true,
-  "allowLateCheckin":       true
-}
-```
-
-| Field | Type | Constraints |
-|---|---|---|
-| `name` | `string?` | 2–200 characters |
-| `status` | `'active' \| 'inactive'?` | |
-| `address` | `string?` | Max 500 characters |
-| `phone` | `string?` | Max 32 characters |
-| `email` | `string?` | Valid email |
-| `website` | `string?` | Valid URL |
-| `logoUrl` | `string?` | Valid URL (see §15.3 for upload) |
-| `timezone` | `string?` | IANA timezone string, e.g. `"Africa/Accra"` |
-| `sessionDurationMinutes` | `number?` | Min 5, max 480 |
-| `lateThresholdMinutes` | `number?` | Min 1 |
-| `requireGeoCheckin` | `boolean?` | Enforce student geofence check-in |
-| `allowLateCheckin` | `boolean?` | Accept attendance marks after session start |
-
-**Response `data`:** Updated `ApiSchool` (extend the type to include all new fields).
-
-**Extended `ApiSchool` type:**
-```typescript
-export interface ApiSchool {
-  id:                      string;
-  name:                    string;
-  code:                    string;
-  status:                  'active' | 'inactive';
-  // Extended fields (all optional — omitted if not set)
-  address?:                string | null;
-  phone?:                  string | null;
-  email?:                  string | null;
-  website?:                string | null;
-  logoUrl?:                string | null;
-  timezone?:               string | null;
-  sessionDurationMinutes?: number | null;
-  lateThresholdMinutes?:   number | null;
-  requireGeoCheckin?:      boolean;
-  allowLateCheckin?:       boolean;
-}
-```
-
----
-
-### 15.3 `POST /organizations/:organizationId/schools/:schoolId/logo`
-
-🔒 👥 🛡 `owner, admin`
-
-**Why needed:** `SchoolSettingsPage` has an "Upload Logo" button that is currently a no-op.
-
-**Request:**
-```json
-{ "logoUrl": "https://cdn.example.com/logos/soe.png" }
-```
-
-| Field | Type | Constraints |
-|---|---|---|
-| `logoUrl` | `string` | Valid HTTPS URL pointing to the uploaded image |
-
-**Response `data`:** Updated `ApiSchool` with `logoUrl` set.
-
-> **Note:** The frontend is responsible for uploading the image file to your CDN/storage (e.g. S3, Cloudinary) and then calling this endpoint with the resulting URL. This endpoint stores the URL only.
-
----
-
-### 15.4 `DELETE /organizations/:organizationId/schools/:schoolId/logo`
-
-🔒 👥 🛡 `owner, admin`
-
-Clears the school logo. **Response `data`:** Updated `ApiSchool` with `logoUrl: null`.
-
----
-
-### 15.5 `GET /organizations/:organizationId/schools` — Filter & Search
-
-🔒 👥
-
-**Why needed:** `SchoolSelector.tsx` lists all schools but has no way to filter active schools or search by name.
-
-**Extended query params:**
-
-| Param | Type | Description |
-|---|---|---|
-| `status` | `'active' \| 'inactive'?` | Filter by school status |
-| `q` | `string?` | Full-text search on school name or code |
-
-**Example:** `GET /organizations/uuid/schools?status=active&q=engineering`
-
-**Response `data`:** Array of matching `ApiSchool` objects (same shape as existing list endpoint).
-
----
-
-### 15.6 `GET /schools/:schoolId` — Direct school lookup (no org context)
-
-🔒
-
-**Why needed:** Many school-scoped routes use `/schools/:schoolId` without the org prefix (e.g. venues, sessions, attendance). The frontend needs to fetch school details in contexts where `organizationId` is not in the URL path — for example, when displaying school info on the `SchoolWorkspaceLayout` sidebar.
-
-**Response `data`:** `ApiSchool` (same shape as the org-scoped GET single).
-
-> If this endpoint already exists and is undocumented, please confirm the exact path so the service layer can be updated.
-
----
-
-## 16. Delete Organization
-
-### Why needed
-Owners need to be able to delete their organization.
-
-### `DELETE /organizations/:organizationId`
-
-🔒 👥 🛡 `owner`
-
-**Response `data`:** `{ success: true }`
-
----
-
-## 17. System Global Administration
-
-### Why needed
-Super-admins need a dedicated panel to oversee the entire platform, manage billing/status of organizations, and troubleshoot user accounts across all schools.
-
-### 17.1 `GET /system/organizations`
-🔒 🛡 `super-admin`
-**Response:** List of all organizations with their school counts and owner details.
-
-### 17.2 `PATCH /system/organizations/:orgId`
-🔒 🛡 `super-admin`
-**Request:**
-```json
-{
-  "status": "suspended" 
-}
-```
-**Purpose:** Temporarily disable an entire organization (e.g., for non-payment).
-
-### 17.3 `GET /system/users`
-🔒 🛡 `super-admin`
-**Query Params:** `?q=email_or_name&orgId=uuid`
-**Response:** Searchable list of every user on the platform.
-
-### 17.4 `GET /system/stats`
-🔒 🛡 `super-admin`
 **Response:**
 ```json
 {
-  "totalUsers": 1500,
-  "totalOrganizations": 45,
-  "totalSchools": 120,
-  "activeSessions": 12
+  "items": [
+    {
+      "id":           "uuid",
+      "action":       "user:create_in_school",
+      "resourceType": "user",
+      "resourceId":   "uuid",
+      "actorUserId":  "uuid",
+      "metadata":     { "email": "...", "role": "lecturer" },
+      "createdAt":    "2025-10-01T14:00:00.000Z"
+    }
+  ],
+  "meta": { "page": 1, "pageSize": 20, "total": 84 }
 }
 ```
 
 ---
 
-## 18. User Context & Permissions
+## 18. System Administration
 
-### 18.1 `GET /schools/:schoolId/my-permissions`
-🔒 👥
-**Why needed:** Used by the frontend whenever a user enters a school workspace to determine what sidebar modules to show.
+Base: `/system`
 
-**Response `data`:**
+All routes require a valid JWT **and** `is_system_admin = true` on the account. Regular school owners/admins are blocked.
+
+To create a super-admin account, run:
+```bash
+pnpm migration:run
+pnpm seed:super-admin   # creates superadmin@edutrack.io / SuperAdmin2024!
+```
+
+### List all organizations
+```
+GET /system/organizations
+```
+**Response:** All organizations with school counts.
+
+### Update organization status
+```
+PATCH /system/organizations/:orgId
+```
 ```json
-["reports:export", "attendance:mark", "timetable:manage"]
+{ "status": "suspended" }
+```
+`status` values: `active | suspended | deleted`
+
+### Delete organization
+```
+DELETE /system/organizations/:orgId
+```
+
+### List all users (platform-wide)
+```
+GET /system/users
+```
+
+### Promote / demote system admin
+```
+PATCH /system/users/:userId/system-admin
+```
+```json
+{ "isSystemAdmin": true }
+```
+
+### Platform stats
+```
+GET /system/stats
+```
+```json
+{
+  "totalUsers":          1500,
+  "totalOrganizations":    45,
+  "totalSchools":         120,
+  "activeSessions":        12,
+  "timestamp":  "2026-05-11T14:00:00.000Z"
+}
 ```
 
 ---
 
-## Priority Matrix
+## 19. Known Gaps
 
-| § | Endpoint(s) | Blocks Feature | Priority |
-|---|---|---|---|
-| 6 | `POST /auth/change-password` | Profile Settings — change password | **Critical** |
-| 15.2 | `PATCH /organizations/:orgId/schools/:schoolId` (extended fields) | School Settings — save general/academic/attendance config | **Critical** |
-| 1 | `PATCH` + `DELETE /schools/:schoolId/departments/:id` | Departments — edit & delete | **High** |
-| 2 | `PATCH` + `DELETE /schools/:schoolId/courses/:id` | Courses — edit & delete | **High** |
-| 3 | Programs CRUD (`/schools/:schoolId/programs`) | Programs page + school setup wizard | **High** |
-| 18 | `GET /schools/:schoolId/my-permissions` | Sidenav/UI Action masking | **High** |
-| 4 | Classes CRUD (`/schools/:schoolId/classes`) | Course assignment & enrollment dropdowns | **High** |
-| 14 | Invitation accept — account setup contract | Staff invitation onboarding | **High** |
-| 15.1 | `DELETE /organizations/:orgId/schools/:schoolId` | School danger zone / deactivation | **High** |
-| 15.5 | `GET /organizations/:orgId/schools?status&q` | School selector filtering & search | **Medium** |
-| 15.3–4 | School logo upload/delete | School branding in settings | **Medium** |
-| 9 | `GET /schools/:schoolId/attendance/summary` | Attendance overview table (all students) | **Medium** |
-| 10 | Reports: enrollment + attendance trend endpoints | Reports page charts | **Medium** |
-| 7 | `PATCH /organizations/:organizationId` | Organization profile / branding | **Medium** |
-| 5 | Semesters CRUD (`/schools/:schoolId/semesters`) | Academic calendar configuration | **Medium** |
-| 8 | `GET /schools/:schoolId/students/:id/attendance/summary` | Per-student at-risk indicator | **Medium** |
-| 12 | School Setup Wizard wiring (programs endpoint) | First-time school structure creation | **Medium** |
-| 15.6 | `GET /schools/:schoolId` (direct lookup, no org prefix) | School workspace layout sidebar | **Low** |
-| 13 | `GET /schools/:schoolId/guardians/me/students` | Guardian dashboard | **Low** |
-| 16 | `DELETE /organizations/:organizationId` | Owner account management | **Low** |
-| 11 | Venue management UI (endpoints already exist) | Venue CRUD page build-out | **Low** |
+The following items are **not yet implemented** in the backend:
+
+| Feature | What's missing | Impact |
+|---|---|---|
+| `GET /schools/:schoolId/my-permissions` | No dedicated endpoint; permissions resolved only via guards | Frontend cannot pre-fetch the permission set to conditionally render sidebar items |
+| `DELETE /schools/:schoolId/academic-years/:id` | Only list, create, update exist | Cannot remove a year — use PATCH `isActive: false` as workaround |
+| `DELETE /schools/:schoolId/semesters/:id` | Only list, create, update exist | Cannot remove a semester |
+| Invitation account-setup flow | `POST /invitations/accept/:token` creates the account silently; no `setupToken` flow | Frontend `AcceptInvitation.tsx` handles both paths — confirm chosen contract with backend |
+| `GET /schools/:schoolId/users/search` filtering by `role` | The `role` query param hits a type mismatch (see §1.2 error codes) | Search works without the `role` filter; role filtering is blocked pending a fix |

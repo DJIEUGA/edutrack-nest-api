@@ -24,6 +24,6 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     if (!user || user.id !== payload.sub || !user.isActive) {
       throw new UnauthorizedError('Authentication failed');
     }
-    return { userId: user.id, email: user.email };
+    return { userId: user.id, email: user.email, isSystemAdmin: user.isSystemAdmin ?? false };
   }
 }

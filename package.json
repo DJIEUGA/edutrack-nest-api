@@ -28,7 +28,8 @@
     "migration:run": "pnpm typeorm migration:run",
     "migration:revert": "pnpm typeorm migration:revert",
     "migration:show": "pnpm typeorm migration:show",
-    "seed": "ts-node --project tsconfig.json -r tsconfig-paths/register src/database/seeds/seed.ts"
+    "seed": "ts-node --project tsconfig.json -r tsconfig-paths/register src/database/seeds/seed.ts",
+    "seed:super-admin": "ts-node --project tsconfig.json -r tsconfig-paths/register src/database/seeds/create-super-admin.ts"
   },
   "dependencies": {
     "@nestjs/cache-manager": "^3.1.2",
