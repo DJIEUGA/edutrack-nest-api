@@ -180,7 +180,7 @@ export class PermissionsService {
     await this.dataSource.query(
       `INSERT INTO user_permissions (user_id, school_id, permission_id)
        SELECT user_id, school_id, $1 FROM user_roles
-       WHERE school_id = $2 AND role = $3
+       WHERE school_id = $2 AND role::text = $3
        ON CONFLICT (user_id, school_id, permission_id) DO NOTHING`,
       [permission.code, params.schoolId, params.role],
     );
@@ -316,7 +316,7 @@ export class PermissionsService {
       `SELECT p.code FROM permissions p
        LEFT JOIN user_permissions up ON up.permission_id = p.code AND up.user_id = $1 AND up.school_id = $2
        LEFT JOIN role_permissions rp ON rp.permission_id = p.code AND rp.school_id = $2
-       LEFT JOIN user_roles ur ON ur.user_id = $1 AND ur.school_id = $2 AND (ur.role = rp.role)
+       LEFT JOIN user_roles ur ON ur.user_id = $1 AND ur.school_id = $2 AND (ur.role::text = rp.role)
        WHERE up.id IS NOT NULL OR (rp.id IS NOT NULL AND ur.id IS NOT NULL)`,
       [userId, schoolId],
     );
@@ -358,7 +358,7 @@ export class PermissionsService {
 
   private async invalidateSystemRoleUsersCache(schoolId: string, role: UserRole) {
     const users = await this.dataSource.query(
-      'SELECT user_id FROM user_roles WHERE school_id = $1 AND role = $2',
+      'SELECT user_id FROM user_roles WHERE school_id = $1 AND role::text = $2',
       [schoolId, role],
     );
     await Promise.all(users.map((u: any) => this.invalidateUserCache(u.user_id, schoolId)));
