@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { Roles } from '@common/decorators/roles.decorator';
@@ -24,7 +24,7 @@ export class AttendanceController {
     @Param('schoolId') schoolId: string,
     @Param('sessionId') sessionId: string,
   ) {
-    return this.attendance.listBySession(schoolId, sessionId);
+    return this.attendance.getSessionAttendance(schoolId, sessionId);
   }
 
   @Get('students/:studentId/attendance')
@@ -47,13 +47,12 @@ export class AttendanceController {
     @Body() dto: MarkAttendanceDto,
     @CurrentUser() user: AuthenticatedRequest['user'],
   ) {
-    return this.attendance.markAttendance({
+    return this.attendance.bulkMark(
       schoolId,
       sessionId,
-      studentId: dto.studentId,
-      status: dto.status,
-      markedBy: user.userId,
-    });
+      user.userId,
+      [{ studentId: dto.studentId, status: dto.status }]
+    );
   }
 
   @Post('sessions/:sessionId/attendance/bulk')
@@ -66,6 +65,30 @@ export class AttendanceController {
     @Body() dto: BulkMarkAttendanceDto,
     @CurrentUser() user: AuthenticatedRequest['user'],
   ) {
-    return this.attendance.markBulk(schoolId, sessionId, user.userId, dto.entries);
+    return this.attendance.bulkMark(schoolId, sessionId, user.userId, dto.entries);
+  }
+
+  @Get('attendance/summary')
+  @TenantScope({ level: 'school' })
+  @Roles('owner', 'admin', 'director', 'lecturer')
+  @ApiOperation({ summary: 'Attendance summary for all students in the school' })
+  summary(
+    @Param('schoolId') schoolId: string,
+    @Query('academicYearId') academicYearId?: string,
+    @Query('sessionId') sessionId?: string,
+  ) {
+    return this.attendance.getSummary(schoolId, { academicYearId, sessionId });
+  }
+
+  @Get('students/:studentId/attendance/summary')
+  @TenantScope({ level: 'school' })
+  @Roles('owner', 'admin', 'director', 'lecturer')
+  @ApiOperation({ summary: 'Aggregated attendance summary for a single student' })
+  studentSummary(
+    @Param('schoolId') schoolId: string,
+    @Param('studentId') studentId: string,
+    @Query('academicYearId') academicYearId?: string,
+  ) {
+    return this.attendance.getStudentSummary(schoolId, studentId, academicYearId);
   }
 }

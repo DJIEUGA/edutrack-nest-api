@@ -1,25 +1,13 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { IsDateString, IsOptional, IsUUID } from 'class-validator';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { Roles } from '@common/decorators/roles.decorator';
 import { TenantScope } from '@common/decorators/tenant-scope.decorator';
 import { JwtAuthGuard } from '@common/guards/jwt-auth.guard';
 import { RolesGuard } from '@common/guards/roles.guard';
 import { TenantGuard } from '@common/guards/tenant.guard';
-import { AuthenticatedRequest } from '@common/types/authenticated-request';
+import { AuthenticatedUser } from '@common/types/authenticated-request';
 import { SessionsService } from '../application/sessions.service';
-import { CreateSessionDto, StartSessionDto } from './dto/session.dto';
-
-class ListSessionsQuery {
-  @IsOptional()
-  @IsUUID()
-  courseAssignmentId?: string;
-
-  @IsOptional()
-  @IsDateString()
-  scheduledDate?: string;
-}
 
 @ApiTags('sessions')
 @ApiBearerAuth()
@@ -30,60 +18,45 @@ export class SessionsController {
 
   @Get()
   @TenantScope({ level: 'school' })
-  @ApiOperation({ summary: 'List sessions' })
-  list(@Param('schoolId') schoolId: string, @Query() q: ListSessionsQuery) {
-    return this.sessions.list(schoolId, {
-      courseAssignmentId: q.courseAssignmentId,
-      scheduledDate: q.scheduledDate,
-    });
-  }
-
-  @Get(':id')
-  @TenantScope({ level: 'school' })
-  @ApiOperation({ summary: 'Get session by id' })
-  getById(@Param('schoolId') schoolId: string, @Param('id') id: string) {
-    return this.sessions.getById(schoolId, id);
+  @Roles('owner', 'admin', 'director', 'hod', 'lecturer', 'student', 'guardian')
+  @ApiOperation({ summary: 'List all sessions for a school' })
+  list(@Param('schoolId') schoolId: string) {
+    return this.sessions.list(schoolId);
   }
 
   @Post()
   @TenantScope({ level: 'school' })
-  @Roles('owner', 'admin', 'hod', 'lecturer')
-  @ApiOperation({ summary: 'Create a session' })
-  create(@Param('schoolId') schoolId: string, @Body() dto: CreateSessionDto) {
-    return this.sessions.create({ schoolId, ...dto });
-  }
-
-  @Post(':id/start')
-  @TenantScope({ level: 'school' })
-  @Roles('lecturer')
-  @ApiOperation({ summary: 'Start a session (lecturer geo-check-in)' })
-  start(
+  @Roles('owner', 'admin', 'hod') // Lecturers can only start/end their assigned sessions, not create new ones ad-hoc
+  @ApiOperation({ summary: 'Create a new session (ad-hoc or from timetable slot)' })
+  create(
     @Param('schoolId') schoolId: string,
-    @Param('id') id: string,
-    @Body() dto: StartSessionDto,
-    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Body() dto: { courseAssignmentId: string; timetableSlotId?: string; scheduledDate: string },
   ) {
-    return this.sessions.start(schoolId, id, { startedBy: user.userId, ...dto });
+    return this.sessions.create(schoolId, dto);
   }
 
-  @Post(':id/end')
+  @Post(':sessionId/start')
   @TenantScope({ level: 'school' })
-  @Roles('lecturer')
-  @ApiOperation({ summary: 'End a session' })
-  end(
+  @Roles('owner', 'admin', 'lecturer')
+  @ApiOperation({ summary: 'Start a scheduled session' })
+  startSession(
     @Param('schoolId') schoolId: string,
-    @Param('id') id: string,
-    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('sessionId') sessionId: string,
+    @Body() dto: { lat: number; lng: number; accuracy: number },
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.sessions.end(schoolId, id, user.userId);
+    return this.sessions.startSession(sessionId, schoolId, user.userId, dto);
   }
 
-  @Post(':id/cancel')
+  @Post(':sessionId/end')
   @TenantScope({ level: 'school' })
-  @Roles('owner', 'admin', 'hod')
-  @HttpCode(200)
-  @ApiOperation({ summary: 'Cancel a session' })
-  cancel(@Param('schoolId') schoolId: string, @Param('id') id: string) {
-    return this.sessions.cancel(schoolId, id);
+  @Roles('owner', 'admin', 'lecturer')
+  @ApiOperation({ summary: 'End a live session' })
+  endSession(
+    @Param('schoolId') schoolId: string,
+    @Param('sessionId') sessionId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.sessions.endSession(sessionId, schoolId, user.userId);
   }
 }

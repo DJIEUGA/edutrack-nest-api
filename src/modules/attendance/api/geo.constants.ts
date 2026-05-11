@@ -1,0 +1,3 @@
+export const GEOFENCE_CONFIG = {
+  DEFAULT_RADIUS_METERS: 200,
+};

@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"e:\\\\logicryle\\\\business units\\\\b2b\\\\logic4b\\\\eduTrack\\\\new\\\\code\\\\eductrack-nest-backend\\\\src\" -Recurse -Directory)",
+      "Bash(Select-Object FullName)",
+      "Bash(pnpm test *)"
+    ]
+  }
+}

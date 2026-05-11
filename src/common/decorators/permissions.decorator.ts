@@ -1,10 +1,11 @@
 import { SetMetadata } from '@nestjs/common';
 
+/**
+ * Metadata key used by RolesGuard to identify required permissions.
+ */
 export const PERMISSIONS_KEY = 'permissions';
 
 /**
- * Marks a route as requiring specific dynamic permissions or role capabilities.
- * The RolesGuard checks both static role-to-capability mappings and direct
- * user_permissions assignments.
+ * Decorator to require specific permissions for a route.
  */
 export const RequirePermissions = (...permissions: string[]) => SetMetadata(PERMISSIONS_KEY, permissions);

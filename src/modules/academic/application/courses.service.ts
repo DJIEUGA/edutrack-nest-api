@@ -1,39 +1,77 @@
 import { Injectable } from '@nestjs/common';
-import { ConflictError, NotFoundError } from '@common/errors/domain.errors';
-import { Course } from '../domain/course.entity';
-import { CourseRepository } from '../infrastructure/course.repository';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
+import { NotFoundError } from '@common/errors/domain.errors';
+import { CoursesRepository } from '../infrastructure/courses.repository';
 
 @Injectable()
 export class CoursesService {
-  constructor(private readonly courses: CourseRepository) {}
+  constructor(
+    @InjectDataSource() private readonly dataSource: DataSource,
+    private readonly coursesRepository: CoursesRepository,
+  ) {}
 
-  list(schoolId: string): Promise<Course[]> {
-    return this.courses.list(schoolId);
+  async list(schoolId: string) {
+    return this.coursesRepository.findAll(schoolId);
   }
 
-  async getById(schoolId: string, id: string): Promise<Course> {
-    const course = await this.courses.findById(id);
-    if (!course || course.schoolId !== schoolId) {
-      throw new NotFoundError('Course not found', { id });
-    }
+  async create(schoolId: string, dto: { 
+    code: string; 
+    title: string; 
+    unitLoad: number; 
+    departmentId?: string 
+  }) {
+    return this.coursesRepository.create(schoolId, dto);
+  }
+
+  /**
+   * Course Assignments: The "Authorized Actor" record.
+   * This proves who was permitted to teach/grade a specific class.
+   */
+  async assign(schoolId: string, dto: {
+    courseId: string;
+    classId: string;
+    lecturerUserId: string;
+    academicYearId: string;
+  }) {
+    return await this.dataSource.transaction(async (manager) => {
+      const assignment = await this.coursesRepository.createAssignment(manager, schoolId, dto);
+
+      // Audit the assignment for transcript integrity
+      await manager.query(
+        `INSERT INTO audit_logs (actor_user_id, scope_school_id, action, resource_type, resource_id, metadata)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          dto.lecturerUserId, // The person being assigned
+          schoolId,
+          'course:assigned',
+          'course_assignment',
+          assignment.id,
+          JSON.stringify({ courseId: dto.courseId, classId: dto.classId })
+        ]
+      );
+
+      return assignment;
+    });
+  }
+
+  async update(schoolId: string, courseId: string, dto: {
+    code?: string;
+    title?: string;
+    unitLoad?: number;
+    departmentId?: string | null;
+  }) {
+    const course = await this.coursesRepository.update(courseId, schoolId, dto);
+    if (!course) throw new NotFoundError('Course not found');
     return course;
   }
 
-  async create(input: {
-    schoolId: string;
-    code: string;
-    title: string;
-    unitLoad?: number;
-    departmentId?: string;
-  }): Promise<Course> {
-    const existing = await this.courses.findByCode(input.schoolId, input.code);
-    if (existing) throw new ConflictError('Course code already in use', { code: input.code });
-    return this.courses.create({
-      schoolId: input.schoolId,
-      code: input.code,
-      title: input.title,
-      unitLoad: input.unitLoad ?? 2,
-      departmentId: input.departmentId ?? null,
-    });
+  async delete(schoolId: string, courseId: string): Promise<void> {
+    const deleted = await this.coursesRepository.delete(courseId, schoolId);
+    if (!deleted) throw new NotFoundError('Course not found');
+  }
+
+  async listAssignments(schoolId: string, academicYearId?: string) {
+    return this.coursesRepository.findAllAssignments(schoolId, academicYearId);
   }
 }

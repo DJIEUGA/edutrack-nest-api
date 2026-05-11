@@ -27,4 +27,19 @@ export class ProgramRepository {
   }): Promise<Program> {
     return this.repo.save(this.repo.create(input));
   }
+
+  async update(id: string, schoolId: string, patch: {
+    code?: string;
+    name?: string;
+    durationYears?: number;
+    departmentId?: string | null;
+  }): Promise<Program | null> {
+    await this.repo.update({ id, schoolId }, patch);
+    return this.repo.findOne({ where: { id, schoolId } });
+  }
+
+  async delete(id: string, schoolId: string): Promise<boolean> {
+    const result = await this.repo.delete({ id, schoolId });
+    return (result.affected ?? 0) > 0;
+  }
 }

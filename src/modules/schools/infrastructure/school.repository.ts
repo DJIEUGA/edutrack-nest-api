@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, ILike, Repository } from 'typeorm';
 import { School } from '../domain/school.entity';
 import { SchoolMembership } from '../domain/school-membership.entity';
 
@@ -18,11 +18,14 @@ export class SchoolRepository {
     return this.schoolRepo.findOne({ where: { id } });
   }
 
-  listByOrganization(organizationId: string): Promise<School[]> {
-    return this.schoolRepo.find({
-      where: { organizationId },
-      order: { createdAt: 'ASC' },
-    });
+  listByOrganization(
+    organizationId: string,
+    filters?: { status?: string; q?: string },
+  ): Promise<School[]> {
+    const where: any = { organizationId };
+    if (filters?.status) where.status = filters.status;
+    if (filters?.q) where.name = ILike(`%${filters.q}%`);
+    return this.schoolRepo.find({ where, order: { createdAt: 'ASC' } });
   }
 
   findByOrgAndCode(organizationId: string, code: string): Promise<School | null> {
@@ -52,11 +55,12 @@ export class SchoolRepository {
     });
   }
 
-  async update(
-    id: string,
-    patch: Partial<Pick<School, 'name' | 'status'>>,
-  ): Promise<School | null> {
+  async update(id: string, patch: Partial<School>): Promise<School | null> {
     await this.schoolRepo.update({ id }, patch);
     return this.findById(id);
+  }
+
+  async delete(id: string): Promise<void> {
+    await this.schoolRepo.delete({ id });
   }
 }

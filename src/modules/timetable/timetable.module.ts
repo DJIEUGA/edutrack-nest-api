@@ -1,15 +1,21 @@
+
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { RolesModule } from '@modules/roles/roles.module';
+import { SchoolsModule } from '@modules/schools/schools.module';
 import { TimetableController } from './api/timetable.controller';
 import { TimetableService } from './application/timetable.service';
-import { TimetableSlot } from './domain/timetable-slot.entity';
-import { TimetableSlotRepository } from './infrastructure/timetable-slot.repository';
+import { TimetableRepository } from './infrastructure/timetable.repository';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([TimetableSlot]), RolesModule],
+  imports: [SchoolsModule, RolesModule],
   controllers: [TimetableController],
-  providers: [TimetableService, TimetableSlotRepository],
-  exports: [TimetableService, TimetableSlotRepository],
+  providers: [
+    TimetableService,
+    TimetableRepository,
+  ],
+  exports: [
+    TimetableService,
+    TimetableRepository,
+  ],
 })
 export class TimetableModule {}

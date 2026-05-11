@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ValidationError } from '@common/errors/domain.errors';
+import { NotFoundError, ValidationError } from '@common/errors/domain.errors';
 import { Semester } from '../domain/semester.entity';
 import { SemesterRepository } from '../infrastructure/semester.repository';
 import { AcademicYearsService } from './academic-years.service';
@@ -40,5 +40,16 @@ export class SemestersService {
       endDate: input.endDate,
       isCurrent: input.isCurrent ?? false,
     });
+  }
+
+  async update(semesterId: string, patch: {
+    name?: string;
+    startDate?: string;
+    endDate?: string;
+    isCurrent?: boolean;
+  }): Promise<Semester> {
+    const updated = await this.semesters.update(semesterId, patch);
+    if (!updated) throw new NotFoundError('Semester not found', { semesterId });
+    return updated;
   }
 }

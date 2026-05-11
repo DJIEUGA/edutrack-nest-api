@@ -1,39 +1,25 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { AuditLogRepository } from '../infrastructure/audit-log.repository';
-
-export interface AuditEvent {
-  actorUserId?: string | null;
-  scopeOrganizationId?: string | null;
-  scopeSchoolId?: string | null;
-  action: string;
-  resourceType: string;
-  resourceId?: string | null;
-  metadata?: Record<string, unknown> | null;
-}
+import { Injectable } from '@nestjs/common';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 
 @Injectable()
 export class AuditService {
-  private readonly logger = new Logger(AuditService.name);
+  constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
 
-  constructor(private readonly repo: AuditLogRepository) {}
-
-  /**
-   * Persists an audit event. Failures are logged but do not propagate; audit
-   * writes must never break a user-visible operation.
-   */
-  async log(event: AuditEvent): Promise<void> {
-    try {
-      await this.repo.create({
-        actorUserId: event.actorUserId ?? null,
-        scopeOrganizationId: event.scopeOrganizationId ?? null,
-        scopeSchoolId: event.scopeSchoolId ?? null,
-        action: event.action,
-        resourceType: event.resourceType,
-        resourceId: event.resourceId ?? null,
-        metadata: event.metadata ?? null,
-      });
-    } catch (err) {
-      this.logger.error({ err, event }, 'Failed to persist audit log');
-    }
+  async listLogs(schoolId: string, limit: number = 50, offset: number = 0) {
+    return this.dataSource.query(
+      `SELECT 
+         a.id, a.action, a.resource_type as "resource", a.resource_id as "resourceId",
+         a.created_at as "createdAt", a.metadata,
+         p.full_name as "actorName",
+         u.email as "actorEmail"
+       FROM audit_logs a
+       JOIN users u ON a.actor_user_id = u.id
+       JOIN profiles p ON u.id = p.id
+       WHERE a.scope_school_id = $1
+       ORDER BY a.created_at DESC
+       LIMIT $2 OFFSET $3`,
+      [schoolId, limit, offset],
+    );
   }
 }

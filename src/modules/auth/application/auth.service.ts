@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
-import { UnauthorizedError } from '@common/errors/domain.errors';
+import { UnauthorizedError, ValidationError } from '@common/errors/domain.errors';
 import { UsersService } from '@modules/users/application/users.service';
 import { TokenPair, TokenService } from './token.service';
 
@@ -32,5 +32,13 @@ export class AuthService {
 
   async logout(presentedToken: string): Promise<void> {
     await this.tokens.revokeRefreshToken(presentedToken);
+  }
+
+  async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
+    const hash = await this.users.getPasswordHash(userId);
+    const valid = await bcrypt.compare(currentPassword, hash ?? '');
+    if (!valid) throw new ValidationError('Current password is incorrect');
+    const newHash = await bcrypt.hash(newPassword, 10);
+    await this.users.updatePasswordHash(userId, newHash);
   }
 }

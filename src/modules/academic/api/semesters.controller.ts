@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { IsUUID } from 'class-validator';
 import { Roles } from '@common/decorators/roles.decorator';
@@ -7,7 +7,7 @@ import { JwtAuthGuard } from '@common/guards/jwt-auth.guard';
 import { RolesGuard } from '@common/guards/roles.guard';
 import { TenantGuard } from '@common/guards/tenant.guard';
 import { SemestersService } from '../application/semesters.service';
-import { CreateSemesterDto } from './dto/semester.dto';
+import { CreateSemesterDto, UpdateSemesterDto } from './dto/semester.dto';
 
 class ListSemestersQuery {
   @IsUUID()
@@ -34,5 +34,16 @@ export class SemestersController {
   @ApiOperation({ summary: 'Create a semester' })
   create(@Param('schoolId') schoolId: string, @Body() dto: CreateSemesterDto) {
     return this.semesters.create({ schoolId, ...dto });
+  }
+
+  @Patch(':semesterId')
+  @TenantScope({ level: 'school' })
+  @Roles('owner', 'admin')
+  @ApiOperation({ summary: 'Update a semester' })
+  update(
+    @Param('semesterId') semesterId: string,
+    @Body() dto: UpdateSemesterDto,
+  ) {
+    return this.semesters.update(semesterId, dto);
   }
 }

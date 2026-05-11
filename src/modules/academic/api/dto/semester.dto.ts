@@ -24,3 +24,26 @@ export class CreateSemesterDto {
   @IsBoolean()
   isCurrent?: boolean;
 }
+
+export class UpdateSemesterDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @Length(2, 64)
+  name?: string;
+
+  @ApiPropertyOptional({ format: 'date' })
+  @IsOptional()
+  @IsDateString()
+  startDate?: string;
+
+  @ApiPropertyOptional({ format: 'date' })
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isCurrent?: boolean;
+}

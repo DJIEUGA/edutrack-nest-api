@@ -24,3 +24,29 @@ export class CreateCourseDto {
   @IsUUID()
   departmentId?: string;
 }
+
+export class UpdateCourseDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @Length(2, 32)
+  @Matches(/^[A-Z0-9-]+$/i)
+  code?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @Length(2, 200)
+  title?: string;
+
+  @ApiPropertyOptional({ minimum: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  unitLoad?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  departmentId?: string;
+}

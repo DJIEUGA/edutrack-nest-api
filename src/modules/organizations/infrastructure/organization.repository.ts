@@ -31,6 +31,15 @@ export class OrganizationRepository {
       .getMany();
   }
 
+  async update(id: string, patch: { name?: string; code?: string; logoUrl?: string | null }): Promise<Organization | null> {
+    await this.orgRepo.update({ id }, patch);
+    return this.findById(id);
+  }
+
+  async delete(id: string): Promise<void> {
+    await this.orgRepo.delete({ id });
+  }
+
   /**
    * Creates an organization and the owner membership atomically.
    */

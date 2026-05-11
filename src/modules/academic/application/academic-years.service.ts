@@ -1,62 +1,56 @@
 import { Injectable } from '@nestjs/common';
-import { ConflictError, NotFoundError, ValidationError } from '@common/errors/domain.errors';
-import { AcademicYear } from '../domain/academic-year.entity';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
+import { NotFoundError } from '@common/errors/domain.errors';
 import { AcademicYearRepository } from '../infrastructure/academic-year.repository';
 
 @Injectable()
 export class AcademicYearsService {
-  constructor(private readonly years: AcademicYearRepository) {}
+  constructor(
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
+    private readonly academicYearRepository: AcademicYearRepository,
+  ) {}
 
-  list(schoolId: string): Promise<AcademicYear[]> {
-    return this.years.list(schoolId);
+  async list(schoolId: string) {
+    return this.academicYearRepository.list(schoolId);
   }
 
-  async getActive(schoolId: string): Promise<AcademicYear> {
-    const active = await this.years.findActive(schoolId);
-    if (!active) throw new NotFoundError('No active academic year for school', { schoolId });
-    return active;
-  }
+  async create(schoolId: string, dto: { name: string; startDate: string; endDate: string; isActive?: boolean }) {
+    return await this.dataSource.transaction(async (manager) => {
+      // Section 8.2: Ensure only one active year per school
+      if (dto.isActive) {
+        await this.academicYearRepository.deactivateAll(manager, schoolId);
+      }
 
-  async getById(schoolId: string, id: string): Promise<AcademicYear> {
-    const year = await this.years.findById(id);
-    if (!year || year.schoolId !== schoolId) {
-      throw new NotFoundError('Academic year not found', { id });
-    }
-    return year;
-  }
+      const payload = {
+        schoolId,
+        name: dto.name,
+        startDate: dto.startDate,
+        endDate: dto.endDate,
+        isActive: dto.isActive ?? false,
+      };
 
-  async create(input: {
-    schoolId: string;
-    name: string;
-    startDate: string;
-    endDate: string;
-    isActive?: boolean;
-  }): Promise<AcademicYear> {
-    if (input.startDate >= input.endDate) {
-      throw new ValidationError('startDate must be before endDate');
-    }
-    return this.years.create({
-      schoolId: input.schoolId,
-      name: input.name,
-      startDate: input.startDate,
-      endDate: input.endDate,
-      isActive: input.isActive ?? false,
+      return this.academicYearRepository.create(manager, schoolId, payload);
     });
   }
 
-  async update(
-    schoolId: string,
-    id: string,
-    patch: Partial<{ name: string; startDate: string; endDate: string; isActive: boolean }>,
-  ): Promise<AcademicYear> {
-    const existing = await this.getById(schoolId, id);
-    const start = patch.startDate ?? existing.startDate;
-    const end = patch.endDate ?? existing.endDate;
-    if (start >= end) {
-      throw new ConflictError('startDate must be before endDate');
-    }
-    const updated = await this.years.update(id, schoolId, patch);
-    if (!updated) throw new NotFoundError('Academic year not found', { id });
-    return updated;
+  async getById(schoolId: string, id: string) {
+    const year = await this.academicYearRepository.findById(id, schoolId);
+    if (!year) throw new NotFoundError('Academic year not found in this school');
+    return year;
+  }
+
+  async update(schoolId: string, id: string, dto: { name?: string; startDate?: string; endDate?: string; isActive?: boolean }) {
+    return await this.dataSource.transaction(async (manager) => {
+      // Atomic toggle for isActive state
+      if (dto.isActive === true) {
+        await this.academicYearRepository.deactivateAll(manager, schoolId, id);
+      }
+
+      const updatedYear = await this.academicYearRepository.update(manager, id, schoolId, dto);
+      if (!updatedYear) throw new NotFoundError('Academic year not found');
+      return updatedYear;
+    });
   }
 }

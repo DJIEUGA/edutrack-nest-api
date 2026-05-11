@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ConflictError } from '@common/errors/domain.errors';
+import { ConflictError, NotFoundError } from '@common/errors/domain.errors';
 import { Program } from '../domain/program.entity';
 import { ProgramRepository } from '../infrastructure/program.repository';
 
@@ -27,5 +27,21 @@ export class ProgramsService {
       durationYears: input.durationYears,
       departmentId: input.departmentId ?? null,
     });
+  }
+
+  async update(schoolId: string, programId: string, patch: {
+    code?: string;
+    name?: string;
+    durationYears?: number;
+    departmentId?: string | null;
+  }): Promise<Program> {
+    const updated = await this.programs.update(programId, schoolId, patch);
+    if (!updated) throw new NotFoundError('Program not found');
+    return updated;
+  }
+
+  async delete(schoolId: string, programId: string): Promise<void> {
+    const deleted = await this.programs.delete(programId, schoolId);
+    if (!deleted) throw new NotFoundError('Program not found');
   }
 }

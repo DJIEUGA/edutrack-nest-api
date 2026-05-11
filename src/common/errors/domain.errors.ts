@@ -15,7 +15,7 @@ export abstract class DomainError extends Error {
 }
 
 export class NotFoundError extends DomainError {
-  readonly code = 'NOT_FOUND';
+  readonly code = 'NOTFOUND';
 }
 
 export class ConflictError extends DomainError {
@@ -23,7 +23,7 @@ export class ConflictError extends DomainError {
 }
 
 export class ValidationError extends DomainError {
-  readonly code = 'VALIDATION_FAILED';
+  readonly code = 'VALIDATION';
 }
 
 export class ForbiddenError extends DomainError {
@@ -35,13 +35,13 @@ export class UnauthorizedError extends DomainError {
 }
 
 export class TenantScopeError extends DomainError {
-  readonly code = 'TENANT_SCOPE_VIOLATION';
+  readonly code = 'TENANTSCOPE';
 }
 
 export class InvalidStateTransitionError extends DomainError {
-  readonly code = 'INVALID_STATE_TRANSITION';
+  readonly code = 'INVALIDSTATETRANSITION';
 }
 
 export class SchedulingConflictError extends DomainError {
-  readonly code = 'SCHEDULING_CONFLICT';
+  readonly code = 'SCHEDULINGCONFLICT';
 }

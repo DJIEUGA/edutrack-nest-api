@@ -24,4 +24,14 @@ export class SemesterRepository {
     const entity = this.repo.create(input);
     return this.repo.save(entity);
   }
+
+  async update(id: string, patch: {
+    name?: string;
+    startDate?: string;
+    endDate?: string;
+    isCurrent?: boolean;
+  }): Promise<Semester | null> {
+    await this.repo.update({ id }, patch);
+    return this.repo.findOne({ where: { id } });
+  }
 }

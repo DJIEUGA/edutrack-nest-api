@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Roles } from '@common/decorators/roles.decorator';
 import { TenantScope } from '@common/decorators/tenant-scope.decorator';
@@ -6,7 +6,7 @@ import { JwtAuthGuard } from '@common/guards/jwt-auth.guard';
 import { RolesGuard } from '@common/guards/roles.guard';
 import { TenantGuard } from '@common/guards/tenant.guard';
 import { DepartmentsService } from '../application/departments.service';
-import { CreateDepartmentDto } from './dto/department.dto';
+import { CreateDepartmentDto, UpdateDepartmentDto } from './dto/department.dto';
 
 @ApiTags('departments')
 @ApiBearerAuth()
@@ -27,6 +27,31 @@ export class DepartmentsController {
   @Roles('owner', 'admin')
   @ApiOperation({ summary: 'Create a department' })
   create(@Param('schoolId') schoolId: string, @Body() dto: CreateDepartmentDto) {
-    return this.departments.create({ schoolId, ...dto });
+    return this.departments.create(schoolId, dto);
+  }
+
+  @Patch(':departmentId')
+  @TenantScope({ level: 'school' })
+  @Roles('owner', 'admin', 'director', 'hod')
+  @ApiOperation({ summary: 'Update a department' })
+  update(
+    @Param('schoolId') schoolId: string,
+    @Param('departmentId') departmentId: string,
+    @Body() dto: UpdateDepartmentDto,
+  ) {
+    return this.departments.update(schoolId, departmentId, dto);
+  }
+
+  @Delete(':departmentId')
+  @TenantScope({ level: 'school' })
+  @Roles('owner', 'admin')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Delete a department' })
+  async remove(
+    @Param('schoolId') schoolId: string,
+    @Param('departmentId') departmentId: string,
+  ) {
+    await this.departments.delete(schoolId, departmentId);
+    return { success: true };
   }
 }

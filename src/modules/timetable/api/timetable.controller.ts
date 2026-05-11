@@ -1,23 +1,13 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { IsOptional, IsUUID } from 'class-validator';
+import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { Roles } from '@common/decorators/roles.decorator';
 import { TenantScope } from '@common/decorators/tenant-scope.decorator';
 import { JwtAuthGuard } from '@common/guards/jwt-auth.guard';
 import { RolesGuard } from '@common/guards/roles.guard';
 import { TenantGuard } from '@common/guards/tenant.guard';
+import { AuthenticatedUser } from '@common/types/authenticated-request';
 import { TimetableService } from '../application/timetable.service';
-import { CreateTimetableSlotDto } from './dto/timetable-slot.dto';
-
-class ListSlotsQuery {
-  @IsOptional()
-  @IsUUID()
-  academicYearId?: string;
-
-  @IsOptional()
-  @IsUUID()
-  courseAssignmentId?: string;
-}
 
 @ApiTags('timetable')
 @ApiBearerAuth()
@@ -28,28 +18,40 @@ export class TimetableController {
 
   @Get()
   @TenantScope({ level: 'school' })
-  @ApiOperation({ summary: 'List timetable slots' })
-  list(@Param('schoolId') schoolId: string, @Query() q: ListSlotsQuery) {
-    return this.timetable.list(schoolId, {
-      academicYearId: q.academicYearId,
-      courseAssignmentId: q.courseAssignmentId,
-    });
+  @Roles('owner', 'admin', 'director', 'hod', 'lecturer', 'student', 'guardian')
+  @ApiOperation({ summary: 'List timetable slots for a school' })
+  list(@Param('schoolId') schoolId: string) {
+    return this.timetable.list(schoolId);
   }
 
   @Post()
   @TenantScope({ level: 'school' })
   @Roles('owner', 'admin', 'hod')
-  @ApiOperation({ summary: 'Create a timetable slot' })
-  create(@Param('schoolId') schoolId: string, @Body() dto: CreateTimetableSlotDto) {
-    return this.timetable.create({ schoolId, ...dto });
+  @ApiOperation({ summary: 'Create a new timetable slot' })
+  create(
+    @Param('schoolId') schoolId: string,
+    @Body() dto: { academicYearId: string; courseAssignmentId: string; dayOfWeek: number; startTime: string; endTime: string; venue?: string },
+  ) {
+    return this.timetable.create(schoolId, dto);
   }
 
-  @Delete(':id')
+  @Patch(':slotId')
+  @TenantScope({ level: 'school' })
+  @Roles('owner', 'admin', 'hod') // Lecturers might have 'reschedule-own' capability, requiring finer-grained check
+  @ApiOperation({ summary: 'Update an existing timetable slot (reschedule)' })
+  update(
+    @Param('schoolId') schoolId: string,
+    @Param('slotId') slotId: string,
+    @Body() dto: { dayOfWeek?: number; startTime?: string; endTime?: string; venue?: string },
+  ) {
+    return this.timetable.update(schoolId, slotId, dto);
+  }
+
+  @Delete(':slotId')
   @TenantScope({ level: 'school' })
   @Roles('owner', 'admin', 'hod')
-  @HttpCode(204)
-  @ApiOperation({ summary: 'Delete a timetable slot' })
-  remove(@Param('schoolId') schoolId: string, @Param('id') id: string) {
-    return this.timetable.remove(schoolId, id);
+  @ApiOperation({ summary: 'Remove a timetable slot' })
+  remove(@Param('schoolId') schoolId: string, @Param('slotId') slotId: string) {
+    return this.timetable.remove(schoolId, slotId);
   }
 }

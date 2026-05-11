@@ -27,7 +27,7 @@ export class AcademicYearsController {
   @Roles('owner', 'admin')
   @ApiOperation({ summary: 'Create an academic year' })
   create(@Param('schoolId') schoolId: string, @Body() dto: CreateAcademicYearDto) {
-    return this.years.create({ schoolId, ...dto });
+    return this.years.create(schoolId, dto);
   }
 
   @Patch(':academicYearId')

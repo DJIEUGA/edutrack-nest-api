@@ -39,4 +39,18 @@ export class ClassRepository {
   }): Promise<ClassEntity> {
     return this.repo.save(this.repo.create(input));
   }
+
+  async update(id: string, schoolId: string, patch: {
+    name?: string;
+    programId?: string | null;
+    level?: number | null;
+  }): Promise<ClassEntity | null> {
+    await this.repo.update({ id, schoolId }, patch);
+    return this.repo.findOne({ where: { id } });
+  }
+
+  async delete(id: string, schoolId: string): Promise<boolean> {
+    const result = await this.repo.delete({ id, schoolId });
+    return (result.affected ?? 0) > 0;
+  }
 }

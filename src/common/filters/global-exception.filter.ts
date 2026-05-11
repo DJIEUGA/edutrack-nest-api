@@ -1,137 +1,91 @@
 import {
-  ArgumentsHost,
-  Catch,
   ExceptionFilter,
+  Catch,
+  ArgumentsHost,
   HttpException,
   HttpStatus,
   Logger,
 } from '@nestjs/common';
-import { Request, Response } from 'express';
-import {
-  ConflictError,
-  DomainError,
-  ForbiddenError,
-  InvalidStateTransitionError,
-  NotFoundError,
-  SchedulingConflictError,
-  TenantScopeError,
-  UnauthorizedError,
-  ValidationError,
-} from '../errors/domain.errors';
-
-interface ApiErrorBody {
-  success: false;
-  statusCode: number;
-  message: string;
-  error: {
-    code: string;
-    details?: unknown;
-  };
-  timestamp: string;
-  requestId: string;
-}
+import { Response } from 'express';
+import { QueryFailedError } from 'typeorm';
+import { DomainError } from '../errors/domain.errors';
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
-  private readonly logger = new Logger(GlobalExceptionFilter.name);
+  private readonly logger = new Logger('ExceptionFilter');
 
-  catch(exception: unknown, host: ArgumentsHost): void {
+  catch(exception: any, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
-    const res = ctx.getResponse<Response>();
-    const req = ctx.getRequest<Request & { correlationId?: string }>();
+    const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<any>();
 
-    const requestId =
-      req.correlationId ?? (req.headers['x-correlation-id'] as string) ?? 'N/A';
-    const timestamp = new Date().toISOString();
-
-    const { status, message, code, details } = this.toResponse(exception);
-
-    if (status >= 500) {
-      this.logger.error(
-        { err: exception, status, requestId },
-        exception instanceof Error ? exception.stack : 'Unknown error',
-      );
-    }
-
-    const body: ApiErrorBody = {
-      success: false,
-      statusCode: status,
-      message,
-      error: { code, details },
-      timestamp,
-      requestId,
-    };
-
-    res.status(status).json(body);
-  }
-
-  private toResponse(exception: unknown): {
-    status: number;
-    message: string;
-    code: string;
-    details?: unknown;
-  } {
-    if (exception instanceof DomainError) {
-      return {
-        status: this.statusForDomainError(exception),
-        message: exception.message,
-        code: exception.code,
-        details: exception.details,
-      };
-    }
+    let status = HttpStatus.INTERNAL_SERVER_ERROR;
+    let message = 'Internal server error';
+    let code = 'INTERNAL_SERVER_ERROR';
+    let details: any = undefined;
 
     if (exception instanceof HttpException) {
-      const status = exception.getStatus();
-      const res = exception.getResponse();
-      const message =
-        typeof res === 'string'
-          ? res
-          : Array.isArray((res as { message?: string[] }).message)
-            ? (res as { message: string[] }).message.join('; ')
-            : ((res as { message?: string }).message ?? exception.message);
-      return { status, message, code: this.codeForStatus(status), details: typeof res === 'object' ? res : undefined };
+      status = exception.getStatus();
+      const res = exception.getResponse() as any;
+      message = res.message || exception.message;
+      code = res.error || 'HTTP_ERROR';
+      
+      // Handle NestJS class-validator errors specifically for Section 22.2
+      if (status === HttpStatus.UNPROCESSABLE_ENTITY || status === HttpStatus.BAD_REQUEST) {
+        code = 'VALIDATION_ERROR';
+        details = Array.isArray(res.message) 
+          ? res.message.reduce((acc: any, cur: string) => {
+              const [field] = cur.split(' ');
+              acc[field] = cur;
+              return acc;
+            }, {})
+          : res.message;
+      }
+    } else if (exception instanceof QueryFailedError) {
+      // Handle database-level errors (e.g. Postgres constraints)
+      status = HttpStatus.BAD_REQUEST;
+      const driverError = (exception as any).driverError;
+      
+      if (driverError?.code === '23505') { // Unique constraint
+        code = 'CONFLICT';
+        message = 'A record with this information already exists.';
+      } else if (driverError?.code === '23502') { // Not null constraint
+        code = 'VALIDATION';
+        message = 'A required field was missing from the request.';
+      } else if (driverError?.code === '42703' || driverError?.code === '42P01') { // Undefined column or table
+        code = 'SCHEMA_MISMATCH';
+        message = 'The database schema is out of sync. Please run migrations.';
+        this.logger.error(`Schema Error: ${exception.message}. Ensure migrations are up to date.`);
+      } else if (driverError?.code === '42883') { // Undefined operator (Type mismatch)
+        code = 'TYPE_MISMATCH';
+        message = 'A data type mismatch occurred (e.g., comparing text to UUID).';
+        this.logger.error(`Type Mismatch Error [42883]: ${exception.message}. Check entity vs database column types.`);
+      } else {
+        code = 'DATABASE_ERROR';
+        message = 'A database error occurred during the request.';
+        this.logger.error(`Database Error [${driverError?.code}]: ${exception.message}`);
+      }
+    } else if (exception instanceof DomainError) {
+      status = HttpStatus.BAD_REQUEST;
+      message = exception.message;
+      code = exception.code;
+      details = exception.details as any;
+      // Domain errors are expected business logic failures; log as warning
+      this.logger.warn(`Domain Error [${code}]: ${message}`);
+    } else {
+      this.logger.error(`Unhandled Exception: ${exception.message}`, exception.stack);
     }
 
-    return {
-      status: HttpStatus.INTERNAL_SERVER_ERROR,
-      message: 'Internal server error',
-      code: 'INTERNAL_ERROR',
-    };
-  }
-
-  private statusForDomainError(error: DomainError): number {
-    if (error instanceof NotFoundError) return HttpStatus.NOT_FOUND;
-    if (error instanceof UnauthorizedError) return HttpStatus.UNAUTHORIZED;
-    if (error instanceof ForbiddenError || error instanceof TenantScopeError)
-      return HttpStatus.FORBIDDEN;
-    if (
-      error instanceof ConflictError ||
-      error instanceof SchedulingConflictError ||
-      error instanceof InvalidStateTransitionError
-    )
-      return HttpStatus.CONFLICT;
-    if (error instanceof ValidationError) return HttpStatus.BAD_REQUEST;
-    return HttpStatus.INTERNAL_SERVER_ERROR;
-  }
-
-  private codeForStatus(status: number): string {
-    switch (status) {
-      case HttpStatus.BAD_REQUEST:
-        return 'BAD_REQUEST';
-      case HttpStatus.UNAUTHORIZED:
-        return 'UNAUTHORIZED';
-      case HttpStatus.FORBIDDEN:
-        return 'FORBIDDEN';
-      case HttpStatus.NOT_FOUND:
-        return 'NOT_FOUND';
-      case HttpStatus.CONFLICT:
-        return 'CONFLICT';
-      case HttpStatus.UNPROCESSABLE_ENTITY:
-        return 'UNPROCESSABLE_ENTITY';
-      case HttpStatus.TOO_MANY_REQUESTS:
-        return 'RATE_LIMITED';
-      default:
-        return status >= 500 ? 'INTERNAL_ERROR' : 'ERROR';
-    }
+    response.status(status).json({
+      success: false,
+      statusCode: status,
+      message: Array.isArray(message) ? message[0] : message,
+      error: {
+        code,
+        details,
+      },
+      timestamp: new Date().toISOString(),
+      requestId: request.correlationId || request.headers['x-request-id'] || 'req_unknown',
+    });
   }
 }

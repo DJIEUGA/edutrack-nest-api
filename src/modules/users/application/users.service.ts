@@ -22,6 +22,18 @@ export class UsersService {
     return user;
   }
 
+  async getPasswordHash(userId: string): Promise<string | null> {
+    const [row] = await this.dataSource.query(
+      'SELECT password_hash as "passwordHash" FROM users WHERE id = $1',
+      [userId],
+    );
+    return row?.passwordHash ?? null;
+  }
+
+  async updatePasswordHash(userId: string, hash: string): Promise<void> {
+    await this.dataSource.query('UPDATE users SET password_hash = $2 WHERE id = $1', [userId, hash]);
+  }
+
   async getById(id: string) {
     const [user] = await this.dataSource.query(
       'SELECT id, email, is_active as "isActive" FROM users WHERE id = $1',
@@ -33,12 +45,21 @@ export class UsersService {
 
   async listBySchool(schoolId: string): Promise<UserListItemDto[]> {
     const rows = await this.dataSource.query(
-      `SELECT u.id, u.email, u.is_active, p.full_name, p.phone, p.avatar_url, ur.role
+      `SELECT 
+         u.id, 
+         u.email, 
+         u.is_active as "isActive", 
+         p.full_name as "fullName", 
+         p.phone, 
+         p.avatar_url as "avatarUrl",
+         sm.created_at as "joinedAt",
+         json_agg(json_build_object('role', ur.role, 'departmentId', ur.department_id)) as roles
        FROM users u
        JOIN profiles p ON u.id = p.id
        JOIN school_memberships sm ON u.id = sm.user_id
        JOIN user_roles ur ON u.id = ur.user_id AND ur.school_id = sm.school_id
        WHERE sm.school_id = $1
+       GROUP BY u.id, p.full_name, p.phone, p.avatar_url, sm.created_at
        ORDER BY p.full_name ASC`,
       [schoolId],
     );
@@ -56,22 +77,24 @@ export class UsersService {
       FROM users u
       JOIN profiles p ON u.id = p.id
       JOIN school_memberships sm ON u.id = sm.user_id
-      JOIN user_roles ur ON u.id = ur.user_id AND ur.school_id = sm.school_id
       WHERE sm.school_id = $1 
         AND ($2::text IS NULL OR u.email ILIKE $2 OR p.full_name ILIKE $2)
-        AND ($3::text IS NULL OR ur.role = $3::user_role)
     `;
 
     const items = await this.dataSource.query(
-      `SELECT u.id, u.email, u.is_active, p.full_name, p.phone, p.avatar_url, ur.role
+      `SELECT u.id, u.email, u.is_active as "isActive", p.full_name as "fullName", p.phone, p.avatar_url as "avatarUrl",
+              (SELECT json_agg(json_build_object('role', role, 'departmentId', department_id)) 
+               FROM user_roles WHERE user_id = u.id AND school_id = $1) as roles
        ${baseConditions}
+       AND ($3::text IS NULL OR EXISTS (SELECT 1 FROM user_roles WHERE user_id = u.id AND school_id = $1 AND role = $3::user_role))
        ORDER BY p.full_name ASC
        LIMIT $4 OFFSET $5`,
       [schoolId, query ? `%${query}%` : null, role || null, limit, offset],
     );
 
     const countResult = await this.dataSource.query(
-      `SELECT COUNT(*)::int as total ${baseConditions}`,
+      `SELECT COUNT(*)::int as total ${baseConditions}
+       AND ($3::text IS NULL OR EXISTS (SELECT 1 FROM user_roles WHERE user_id = u.id AND school_id = $1 AND role = $3::user_role))`,
       [schoolId, query ? `%${query}%` : null, role || null],
     );
 
@@ -89,11 +112,12 @@ export class UsersService {
 
   async getByIdInSchool(userId: string, schoolId: string): Promise<UserListItemDto> {
     const [user] = await this.dataSource.query(
-      `SELECT u.id, u.email, u.is_active, p.full_name, p.phone, p.avatar_url, ur.role
+      `SELECT u.id, u.email, u.is_active as "isActive", p.full_name as "fullName", p.phone, p.avatar_url as "avatarUrl",
+              (SELECT json_agg(json_build_object('role', role, 'departmentId', department_id)) 
+               FROM user_roles WHERE user_id = u.id AND school_id = $2) as roles
        FROM users u
        JOIN profiles p ON u.id = p.id
        JOIN school_memberships sm ON u.id = sm.user_id
-       JOIN user_roles ur ON u.id = ur.user_id AND ur.school_id = sm.school_id
        WHERE u.id = $1 AND sm.school_id = $2`,
       [userId, schoolId],
     );

@@ -45,4 +45,19 @@ export class ClassesService {
       level: input.level ?? null,
     });
   }
+
+  async update(schoolId: string, classId: string, patch: {
+    name?: string;
+    programId?: string | null;
+    level?: number | null;
+  }): Promise<ClassEntity> {
+    const updated = await this.classes.update(classId, schoolId, patch);
+    if (!updated) throw new NotFoundError('Class not found', { classId });
+    return updated;
+  }
+
+  async delete(schoolId: string, classId: string): Promise<void> {
+    const deleted = await this.classes.delete(classId, schoolId);
+    if (!deleted) throw new NotFoundError('Class not found', { classId });
+  }
 }

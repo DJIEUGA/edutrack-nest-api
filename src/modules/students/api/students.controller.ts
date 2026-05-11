@@ -1,58 +1,71 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { IsOptional, IsUUID } from 'class-validator';
-import { Roles } from '@common/decorators/roles.decorator';
-import { TenantScope } from '@common/decorators/tenant-scope.decorator';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { StudentsService } from '../application/students.service';
 import { JwtAuthGuard } from '@common/guards/jwt-auth.guard';
 import { RolesGuard } from '@common/guards/roles.guard';
 import { TenantGuard } from '@common/guards/tenant.guard';
-import { StudentsService } from '../application/students.service';
-import { CreateStudentDto, UpdateStudentDto } from './dto/student.dto';
+import { Roles } from '@common/decorators/roles.decorator';
+import { TenantScope } from '@common/decorators/tenant-scope.decorator';
+import { CurrentUser } from '@common/decorators/current-user.decorator';
+import { AuthenticatedUser } from '@common/types/authenticated-request';
 
-class ListStudentsQuery {
-  @IsOptional()
-  @IsUUID()
-  classId?: string;
-}
-
-@ApiTags('students')
-@ApiBearerAuth()
 @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 @Controller('schools/:schoolId/students')
 export class StudentsController {
-  constructor(private readonly students: StudentsService) {}
+  constructor(private readonly studentsService: StudentsService) {}
 
   @Get()
   @TenantScope({ level: 'school' })
-  @ApiOperation({ summary: 'List students (optionally filtered by class)' })
-  list(@Param('schoolId') schoolId: string, @Query() q: ListStudentsQuery) {
-    return this.students.list(schoolId, q.classId);
+  @Roles('owner', 'admin', 'director')
+  async list(
+    @Param('schoolId') schoolId: string,
+    @Query('status') status?: string,
+    @Query('programId') programId?: string,
+    @Query('level') level?: number,
+    @Query('limit') limit?: number,
+    @Query('offset') offset?: number,
+  ) {
+    return this.studentsService.search(schoolId, { status, programId, level, limit, offset });
   }
 
-  @Get(':id')
+  @Get(':studentId')
   @TenantScope({ level: 'school' })
-  @ApiOperation({ summary: 'Get student by id' })
-  getById(@Param('schoolId') schoolId: string, @Param('id') id: string) {
-    return this.students.getById(schoolId, id);
+  @Roles('owner', 'admin', 'director', 'lecturer')
+  async getOne(@Param('schoolId') schoolId: string, @Param('studentId') studentId: string) {
+    return this.studentsService.getById(schoolId, studentId);
   }
 
   @Post()
   @TenantScope({ level: 'school' })
-  @Roles('owner', 'admin', 'hod')
-  @ApiOperation({ summary: 'Enrol a student' })
-  create(@Param('schoolId') schoolId: string, @Body() dto: CreateStudentDto) {
-    return this.students.create({ schoolId, ...dto });
+  @Roles('owner', 'admin')
+  async create(
+    @Param('schoolId') schoolId: string,
+    @Body() dto: { userId: string; matricNo?: string; classId?: string },
+  ) {
+    return this.studentsService.create(schoolId, dto);
   }
 
-  @Patch(':id')
+  @Patch(':studentId')
   @TenantScope({ level: 'school' })
-  @Roles('owner', 'admin', 'hod')
-  @ApiOperation({ summary: 'Update student record' })
-  update(
+  @Roles('owner', 'admin')
+  async updateStatus(
     @Param('schoolId') schoolId: string,
-    @Param('id') id: string,
-    @Body() dto: UpdateStudentDto,
+    @Param('studentId') studentId: string,
+    @Body() dto: { status: 'approved' | 'rejected' | 'waitlisted'; rejectionReason?: string },
+    @CurrentUser() actor: AuthenticatedUser,
   ) {
-    return this.students.update(schoolId, id, dto);
+    return this.studentsService.updateStatus(
+      actor.userId,
+      schoolId,
+      studentId,
+      dto.status,
+      dto.rejectionReason ?? '',
+    );
+  }
+
+  @Delete(':studentId')
+  @TenantScope({ level: 'school' })
+  @Roles('owner', 'admin')
+  async remove(@Param('schoolId') schoolId: string, @Param('studentId') studentId: string) {
+    return this.studentsService.remove(schoolId, studentId);
   }
 }

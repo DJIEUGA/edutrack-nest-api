@@ -27,3 +27,22 @@ export class CreateClassDto {
   @Min(1)
   level?: number;
 }
+
+export class UpdateClassDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @Length(1, 100)
+  name?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  programId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  level?: number;
+}

@@ -1,19 +1,34 @@
 import { Injectable } from '@nestjs/common';
-import { ConflictError } from '@common/errors/domain.errors';
-import { Department } from '../domain/department.entity';
+import { NotFoundError, ConflictError } from '@common/errors/domain.errors';
 import { DepartmentRepository } from '../infrastructure/department.repository';
 
 @Injectable()
 export class DepartmentsService {
-  constructor(private readonly departments: DepartmentRepository) {}
+  constructor(
+    private readonly departmentRepository: DepartmentRepository,
+  ) {}
 
-  list(schoolId: string): Promise<Department[]> {
-    return this.departments.list(schoolId);
+  async list(schoolId: string) {
+    return this.departmentRepository.list(schoolId);
   }
 
-  async create(input: { schoolId: string; code: string; name: string }): Promise<Department> {
-    const existing = await this.departments.findByCode(input.schoolId, input.code);
-    if (existing) throw new ConflictError('Department code already in use', { code: input.code });
-    return this.departments.create(input);
+  async create(schoolId: string, dto: { code: string; name: string }) {
+    try {
+      return await this.departmentRepository.create(schoolId, dto);
+    } catch (e: any) {
+      if (e.code === '23505') throw new ConflictError('Department code already exists in this school');
+      throw e;
+    }
+  }
+
+  async update(schoolId: string, id: string, dto: { name?: string; code?: string }) {
+    const dept = await this.departmentRepository.update(id, schoolId, dto);
+    if (!dept) throw new NotFoundError('Department not found');
+    return dept;
+  }
+
+  async delete(schoolId: string, id: string): Promise<void> {
+    const deleted = await this.departmentRepository.delete(id, schoolId);
+    if (!deleted) throw new NotFoundError('Department not found');
   }
 }

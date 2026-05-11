@@ -1,5 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsOptional, IsString, Length } from 'class-validator';
+import {
+  IsBoolean, IsEmail, IsIn, IsInt, IsOptional, IsString, IsUrl, Length, Max, Min,
+} from 'class-validator';
 import { SchoolStatus } from '../../domain/school.entity';
 
 export class UpdateSchoolDto {
@@ -13,4 +15,59 @@ export class UpdateSchoolDto {
   @IsOptional()
   @IsIn(['active', 'inactive'])
   status?: SchoolStatus;
+
+  @ApiPropertyOptional({ maxLength: 500 })
+  @IsOptional()
+  @IsString()
+  @Length(0, 500)
+  address?: string;
+
+  @ApiPropertyOptional({ maxLength: 32 })
+  @IsOptional()
+  @IsString()
+  @Length(0, 32)
+  phone?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUrl()
+  website?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUrl()
+  logoUrl?: string;
+
+  @ApiPropertyOptional({ example: 'Africa/Accra' })
+  @IsOptional()
+  @IsString()
+  timezone?: string;
+
+  @ApiPropertyOptional({ minimum: 5, maximum: 480 })
+  @IsOptional()
+  @IsInt()
+  @Min(5)
+  @Max(480)
+  sessionDurationMinutes?: number;
+
+  @ApiPropertyOptional({ minimum: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  lateThresholdMinutes?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  requireGeoCheckin?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  allowLateCheckin?: boolean;
 }
