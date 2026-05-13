@@ -105,9 +105,6 @@ importers:
       '@types/bcryptjs':
         specifier: ^2.4.6
         version: 2.4.6
-      '@types/cache-manager':
-        specifier: ^5.0.0
-        version: 5.0.0
       '@types/express':
         specifier: ^5.0.0
         version: 5.0.6
@@ -822,10 +819,6 @@ packages:
 
   '@types/body-parser@1.19.6':
     resolution: {integrity: sha512-HLFeCYgz89uk22N5Qg3dvGvsv46B8GLvKKo1zKG4NybA8U2DiEO3w9lqGg29t/tfLRJpJ6iQxnVw4OnB7MoM9g==}
-
-  '@types/cache-manager@5.0.0':
-    resolution: {integrity: sha512-YaQBBhn2OIShxGMH7l1qzGgXCQJ2TRYTqMhFMXRBkDcXQIlqXv+XFkBGstwXSyv7q+JQm3HbpVhaVF8l5tr+Hg==}
-    deprecated: This is a stub types definition. cache-manager provides its own type definitions, so you do not need this installed.
 
   '@types/connect@3.4.38':
     resolution: {integrity: sha512-K6uROf1LD88uDQqJCktA4yzL1YYAK6NgfsI0v/mTgyPKWsX1CnJ0XPSDhViejru1GcRkLWb8RlzFYJRqGUbaug==}
@@ -4331,10 +4324,6 @@ snapshots:
     dependencies:
       '@types/connect': 3.4.38
       '@types/node': 22.19.19
-
-  '@types/cache-manager@5.0.0':
-    dependencies:
-      cache-manager: 7.2.8
 
   '@types/connect@3.4.38':
     dependencies:
