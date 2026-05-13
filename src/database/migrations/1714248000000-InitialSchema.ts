@@ -327,7 +327,7 @@ export class InitialSchema1714248000000 implements MigrationInterface {
       )
     `);
 
-    // Permissions catalog — must exist before roles/role_permissions reference it
+    // Permissions catalog — must exist before role_permissions/user_permissions reference it
     await queryRunner.query(`
       create table permissions (
         id uuid primary key default gen_random_uuid(),
@@ -337,7 +337,19 @@ export class InitialSchema1714248000000 implements MigrationInterface {
       )
     `);
 
-    // Dynamic Roles
+    // Dynamic roles: school-specific custom roles (used by the app via dynamic_roles table)
+    await queryRunner.query(`
+      create table dynamic_roles (
+        id uuid primary key default gen_random_uuid(),
+        school_id uuid not null references schools(id) on delete cascade,
+        code text not null,
+        name text not null,
+        created_at timestamptz not null default now(),
+        unique (school_id, code)
+      )
+    `);
+
+    // Static roles table kept for schema completeness
     await queryRunner.query(`
       create table roles (
         id uuid primary key default gen_random_uuid(),
@@ -351,22 +363,26 @@ export class InitialSchema1714248000000 implements MigrationInterface {
       )
     `);
 
+    // Role-based permissions: role stored as text (enum value or dynamic role code),
+    // permission_id stores the permission code (text), not a uuid FK to permissions.id
     await queryRunner.query(`
       create table role_permissions (
         id uuid primary key default gen_random_uuid(),
-        role_id uuid not null references roles(id) on delete cascade,
-        permission_id uuid not null references permissions(id) on delete cascade,
+        school_id uuid not null references schools(id) on delete cascade,
+        role text not null,
+        permission_id text not null references permissions(code) on delete cascade,
         created_at timestamptz not null default now(),
-        unique (role_id, permission_id)
+        unique (school_id, role, permission_id)
       )
     `);
 
+    // User-specific permission grants: permission_id stores the permission code (text)
     await queryRunner.query(`
       create table user_permissions (
         id uuid primary key default gen_random_uuid(),
         user_id uuid not null references users(id) on delete cascade,
         school_id uuid references schools(id) on delete cascade,
-        permission_id uuid not null references permissions(id) on delete cascade,
+        permission_id text not null references permissions(code) on delete cascade,
         created_at timestamptz not null default now(),
         unique (user_id, school_id, permission_id)
       )
@@ -445,9 +461,7 @@ export class InitialSchema1714248000000 implements MigrationInterface {
       'staff_invitations',
       'import_jobs',
       'roles',
-      'role_permissions',
-      'permissions',
-      'user_permissions',
+      // role_permissions, permissions, user_permissions omitted — no updated_at column
     ];
     for (const t of tablesWithUpdatedAt) {
       await queryRunner.query(
