@@ -4,7 +4,10 @@
       "Bash(Get-ChildItem -Path \"e:\\\\logicryle\\\\business units\\\\b2b\\\\logic4b\\\\eduTrack\\\\new\\\\code\\\\eductrack-nest-backend\\\\src\" -Recurse -Directory)",
       "Bash(Select-Object FullName)",
       "Bash(pnpm test *)",
-      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts, null, 2\\)\\)\")"
+      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts, null, 2\\)\\)\")",
+      "Bash(pnpm build *)",
+      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\('build:', p.scripts.build\\); console.log\\('prebuild:', p.scripts.prebuild\\);\")",
+      "Bash(echo \"EXIT: $?\")"
     ]
   }
 }
