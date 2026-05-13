@@ -9,7 +9,6 @@ RETRY_INTERVAL=2
 attempt=1
 
 until node -r ./register.js -e "
-  const { DataSource } = require('typeorm');
   const ds = require('./dist/database/data-source').default;
   ds.initialize().then(() => ds.destroy()).then(() => process.exit(0)).catch(() => process.exit(1));
 " 2>/dev/null; do
