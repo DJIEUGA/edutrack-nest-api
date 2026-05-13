@@ -327,6 +327,16 @@ export class InitialSchema1714248000000 implements MigrationInterface {
       )
     `);
 
+    // Permissions catalog — must exist before roles/role_permissions reference it
+    await queryRunner.query(`
+      create table permissions (
+        id uuid primary key default gen_random_uuid(),
+        code text not null unique,
+        description text,
+        created_at timestamptz not null default now()
+      )
+    `);
+
     // Dynamic Roles
     await queryRunner.query(`
       create table roles (
@@ -348,16 +358,6 @@ export class InitialSchema1714248000000 implements MigrationInterface {
         permission_id uuid not null references permissions(id) on delete cascade,
         created_at timestamptz not null default now(),
         unique (role_id, permission_id)
-      )
-    `);
-
-    // Dynamic Permissions
-    await queryRunner.query(`
-      create table permissions (
-        id uuid primary key default gen_random_uuid(),
-        code text not null unique,
-        description text,
-        created_at timestamptz not null default now()
       )
     `);
 
