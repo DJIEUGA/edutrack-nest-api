@@ -17,5 +17,36 @@ services:
       timeout: 5s
       retries: 5
 
+  app:
+    build: .
+    container_name: edutrack-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-3001}
+      GLOBAL_PREFIX: ${GLOBAL_PREFIX:-api/v1}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME:-edutrack}
+      DB_PASSWORD: ${DB_PASSWORD:-edutrack}
+      DB_DATABASE: ${DB_DATABASE:-edutrack}
+      DB_SCHEMA: ${DB_SCHEMA:-public}
+      DB_LOGGING: ${DB_LOGGING:-false}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-7d}
+      JWT_ISSUER: ${JWT_ISSUER:-edutrack}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-edutrack-api}
+      THROTTLE_TTL: ${THROTTLE_TTL:-60}
+      THROTTLE_LIMIT: ${THROTTLE_LIMIT:-120}
+      AUTH_THROTTLE_LIMIT: ${AUTH_THROTTLE_LIMIT:-10}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - '${PORT:-3001}:${PORT:-3001}'
+
 volumes:
   edutrack-postgres-data:
