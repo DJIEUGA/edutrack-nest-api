@@ -24,6 +24,49 @@ export class UserListItemDto {
   role!: UserRole;
 }
 
+export class RoleWithPermissionsDto {
+  @ApiProperty({ enum: ['owner', 'admin', 'director', 'hod', 'lecturer', 'student', 'guardian', 'follower'] })
+  role!: UserRole;
+
+  @ApiProperty({ format: 'uuid', required: false, nullable: true })
+  roleId?: string | null;
+
+  @ApiProperty({ format: 'uuid', required: false, nullable: true })
+  departmentId?: string | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  dynamicRoleName?: string | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  dynamicRoleCode?: string | null;
+
+  @ApiProperty({ type: [String] })
+  permissions!: string[];
+}
+
+export class UserDetailDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty({ example: 'user@example.com' })
+  email!: string;
+
+  @ApiProperty()
+  isActive!: boolean;
+
+  @ApiProperty({ example: 'John Doe' })
+  fullName!: string;
+
+  @ApiProperty({ required: false, nullable: true })
+  phone?: string | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  avatarUrl?: string | null;
+
+  @ApiProperty({ type: [RoleWithPermissionsDto] })
+  roles!: RoleWithPermissionsDto[];
+}
+
 export class UserSearchMetaDto {
   @ApiProperty({ example: 100 })
   total!: number;

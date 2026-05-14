@@ -1,12 +1,14 @@
 import { UserRole } from '@common/types/role.types';
 
 /**
- * Capability map. Each role lists the action verbs it can perform server-side.
- * Controllers reference these via the @Roles() decorator at the route level;
- * service-layer code can also call hasCapability() for finer checks.
+ * Capability map. Each role lists:
+ *   - Fine-grained backend codes (domain:action) used with hasCapability() guards
+ *   - Frontend navigation codes (verb:resource) from the requirements spec, merged
+ *     into the permissions array returned to the client via listUserRolesBySchool.
  */
 export const ROLE_CAPABILITIES: Record<UserRole, ReadonlySet<string>> = {
   owner: new Set([
+    // Backend authorization
     'organization:*',
     'school:*',
     'user-role:assign',
@@ -18,8 +20,52 @@ export const ROLE_CAPABILITIES: Record<UserRole, ReadonlySet<string>> = {
     'invitation:*',
     'import:*',
     'audit:read',
+    // Frontend navigation — role capability set
+    'manage:organization',
+    'manage:schools',
+    'manage:users',
+    'manage:billing',
+    'view:analytics',
+    'view:all-data',
+    // Frontend navigation — workspace items (owner sees everything)
+    'manage:school',
+    'manage:departments',
+    'manage:staff',
+    'manage:timetables',
+    'manage:rooms',
+    'view:school-analytics',
+    'view:all-school-data',
+    'manage:schedules',
+    'manage:student-records',
+    'view:reports',
+    'manage:announcements',
+    'manage:department',
+    'manage:courses',
+    'manage:lecturers',
+    'approve:timetables',
+    'view:department-analytics',
+    'manage:sessions',
+    'start:session',
+    'end:session',
+    'mark:attendance',
+    'view:class-roster',
+    'manage:course-materials',
+    'view:timetable',
+    'view:attendance',
+    'view:grades',
+    'view:course-materials',
+    'view:linked-students',
+    'view:student-attendance',
+    'view:student-grades',
+    'view:public-info',
+    'view:announcements',
+    // Gap permissions resolved
+    'manage:imports',
+    'view:student-records',
   ]),
+
   admin: new Set([
+    // Backend authorization
     'school:read',
     'school:update',
     'user-role:assign',
@@ -32,16 +78,50 @@ export const ROLE_CAPABILITIES: Record<UserRole, ReadonlySet<string>> = {
     'invitation:*',
     'import:*',
     'audit:read',
+    // Frontend navigation — role capability set
+    'manage:timetables',
+    'manage:rooms',
+    'manage:schedules',
+    'manage:student-records',
+    'view:reports',
+    'manage:announcements',
+    // Frontend navigation — workspace extras for admin
+    'manage:school',
+    'manage:departments',
+    'manage:staff',
+    'view:school-analytics',
+    // Gap permissions resolved
+    'manage:courses',
+    'manage:imports',
+    'view:student-records',
+    'view:student-grades',
   ]),
+
   director: new Set([
+    // Backend authorization
     'school:read',
     'academic:read',
     'timetable:read',
     'session:read',
     'attendance:read',
     'audit:read',
+    // Frontend navigation — role capability set
+    'manage:school',
+    'manage:departments',
+    'manage:staff',
+    'manage:timetables',
+    'manage:rooms',
+    'view:school-analytics',
+    'view:all-school-data',
+    // Gap permissions resolved
+    'manage:courses',
+    'view:student-records',
+    'view:student-grades',
+    'view:reports',
   ]),
+
   hod: new Set([
+    // Backend authorization
     'school:read',
     'academic:read',
     'timetable:read',
@@ -49,8 +129,18 @@ export const ROLE_CAPABILITIES: Record<UserRole, ReadonlySet<string>> = {
     'session:read',
     'session:write',
     'attendance:read',
+    // Frontend navigation — role capability set
+    'manage:department',
+    'manage:courses',
+    'manage:lecturers',
+    'approve:timetables',
+    'view:department-analytics',
+    // Gap permissions resolved
+    'view:student-grades',
   ]),
+
   lecturer: new Set([
+    // Backend authorization
     'school:read',
     'academic:read',
     'timetable:read',
@@ -61,23 +151,54 @@ export const ROLE_CAPABILITIES: Record<UserRole, ReadonlySet<string>> = {
     'session:reschedule-own',
     'attendance:read',
     'attendance:mark',
+    // Frontend navigation — role capability set
+    'manage:sessions',
+    'start:session',
+    'end:session',
+    'mark:attendance',
+    'view:class-roster',
+    'manage:course-materials',
   ]),
+
   student: new Set([
+    // Backend authorization
     'school:read',
     'academic:read',
     'timetable:read-own',
     'session:read-own',
     'attendance:read-own',
+    // Frontend navigation — role capability set
+    'view:timetable',
+    'view:attendance',
+    'view:grades',
+    'view:course-materials',
+    'join:session',
   ]),
-  guardian: new Set(['attendance:read-ward', 'session:read-ward']),
-  follower: new Set(['organization:read']),
+
+  guardian: new Set([
+    // Backend authorization
+    'attendance:read-ward',
+    'session:read-ward',
+    // Frontend navigation — role capability set
+    'view:linked-students',
+    'view:student-attendance',
+    'view:student-grades',
+    'receive:notifications',
+  ]),
+
+  follower: new Set([
+    // Backend authorization
+    'organization:read',
+    // Frontend navigation — role capability set
+    'view:public-info',
+    'view:announcements',
+  ]),
 };
 
 export function hasCapability(role: UserRole, capability: string): boolean {
   const caps = ROLE_CAPABILITIES[role];
   if (!caps) return false;
-  
-  // Check for exact match or wildcard match
+
   if (caps.has(capability)) return true;
   const [domain] = capability.split(':');
   return caps.has(`${domain}:*`);

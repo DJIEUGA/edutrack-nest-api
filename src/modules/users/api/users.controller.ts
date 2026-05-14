@@ -5,20 +5,29 @@ import { Roles } from '@common/decorators/roles.decorator';
 import { JwtAuthGuard } from '@common/guards/jwt-auth.guard';
 import { RolesGuard } from '@common/guards/roles.guard';
 import { TenantGuard } from '@common/guards/tenant.guard';
+import { ForbiddenError } from '@common/errors/domain.errors';
 import { AuthenticatedUser } from '@common/types/authenticated-request';
 import { UserRole } from '@common/types/role.types';
+import { RoleResolverService } from '@modules/roles/application/role-resolver.service';
+import { RolesService } from '@modules/roles/application/roles.service';
 import { CreateUserDto } from '../api/dto/create-user.dto';
 import { UpdateUserDto } from '../api/dto/update-user.dto';
 import { ResetPasswordDto } from '../api/dto/reset-password.dto';
 import { UsersService } from '../application/users.service';
-import { UserSearchResponseDto, UserListItemDto } from './dto/user-search-response.dto';
+import { UserDetailDto, UserSearchResponseDto, UserListItemDto } from './dto/user-search-response.dto';
 
 @ApiTags('users')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 @Controller('schools/:schoolId/users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  private static readonly PRIVILEGED_ROLES: UserRole[] = ['owner', 'admin', 'director'];
+
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly roleResolver: RoleResolverService,
+    private readonly rolesService: RolesService,
+  ) {}
 
   @Post()
   @Roles('owner', 'admin')
@@ -54,9 +63,23 @@ export class UsersController {
   }
 
   @Get(':userId')
-  @Roles('owner', 'admin', 'director')
-  @ApiOperation({ summary: 'Get details of a specific user in the school' })
-  getOne(@Param('schoolId') schoolId: string, @Param('userId') userId: string) {
+  @Roles('owner', 'admin', 'director', 'admin', 'hod', 'lecturer', 'student', 'guardian')
+  @ApiOperation({ summary: 'Get details of a specific user in the school. Any member may fetch their own profile; privileged roles may fetch any member.' })
+  async getOne(
+    @Param('schoolId') schoolId: string,
+    @Param('userId') userId: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    if (actor.userId !== userId) {
+      const isPrivileged = await this.roleResolver.userHasRoleInSchool(
+        actor.userId,
+        schoolId,
+        UsersController.PRIVILEGED_ROLES,
+      );
+      if (!isPrivileged) {
+        throw new ForbiddenError('You can only view your own profile');
+      }
+    }
     return this.usersService.getByIdInSchool(userId, schoolId);
   }
 

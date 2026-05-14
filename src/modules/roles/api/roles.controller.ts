@@ -25,7 +25,7 @@ export class RolesController {
 
   @Get(':userId')
   @TenantScope({ level: 'school' })
-  @Roles('owner', 'admin', 'director')
+  @Roles('owner', 'admin', 'director', 'admin', 'hod', 'lecturer', 'student', 'guardian')
   @ApiOperation({ summary: 'List a user\'s roles in this school' })
   async list(@Param('schoolId') schoolId: string, @Param('userId') userId: string) {
     return this.roles.listUserRolesBySchool(userId, schoolId);

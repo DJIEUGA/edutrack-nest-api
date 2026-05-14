@@ -23,6 +23,9 @@ export class UserRoleAssignment {
   @Column({ type: 'enum', enum: [...USER_ROLES] })
   role!: UserRole;
 
+  @Column({ name: 'role_id', type: 'uuid', nullable: true })
+  roleId?: string | null;
+
   @Column({ name: 'department_id', type: 'uuid', nullable: true })
   departmentId?: string | null;
 

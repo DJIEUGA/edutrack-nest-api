@@ -89,26 +89,44 @@ export class PermissionsService {
   }
 
   /**
-   * Automatically configures a new school with standard dynamic roles and 
-   * default permission mappings for all roles.
+   * Automatically configures a new school with standard dynamic roles and
+   * default permission mappings for all roles (both granular backend codes
+   * and frontend navigation codes from the requirements spec).
    */
   async initializeSchoolDefaultPermissions(schoolId: string) {
     return await this.dataSource.transaction(async (manager) => {
-      // 1. Seed common "Dynamic Roles"
+      // 1. Seed common dynamic roles
       await manager.query(`
         INSERT INTO "dynamic_roles" (school_id, code, name)
-        VALUES 
+        VALUES
           ($1, 'exam-officer', 'Exam Officer'),
           ($1, 'bursar', 'Bursar / Accountant'),
           ($1, 'registrar', 'Registrar')
         ON CONFLICT (school_id, code) DO NOTHING;
       `, [schoolId]);
 
-      // 2. Define default permission mappings
+      // 2. Permission mappings: granular backend codes + frontend navigation codes
       const roleMappings = [
+        {
+          role: 'owner',
+          permissions: [
+            // Frontend navigation codes
+            'manage:organization', 'manage:schools', 'manage:users', 'manage:billing',
+            'view:analytics', 'view:all-data', 'manage:school', 'manage:departments',
+            'manage:staff', 'manage:timetables', 'manage:rooms', 'view:school-analytics',
+            'view:all-school-data', 'manage:schedules', 'manage:student-records', 'view:reports',
+            'manage:announcements', 'manage:department', 'manage:courses', 'manage:lecturers',
+            'approve:timetables', 'view:department-analytics', 'manage:sessions', 'start:session',
+            'end:session', 'mark:attendance', 'view:class-roster', 'manage:course-materials',
+            'view:timetable', 'view:attendance', 'view:grades', 'view:course-materials',
+            'view:linked-students', 'view:student-attendance', 'view:student-grades',
+            'view:public-info', 'view:announcements', 'manage:imports', 'view:student-records',
+          ],
+        },
         {
           role: 'admin',
           permissions: [
+            // Granular backend codes
             'user:read', 'user:create', 'user:update', 'user:delete',
             'school:read', 'school:update',
             'academic-year:read', 'academic-year:create', 'academic-year:update',
@@ -118,38 +136,73 @@ export class PermissionsService {
             'invitation:read', 'invitation:create', 'invitation:delete',
             'venue:read', 'venue:create', 'venue:update',
             'import:job:read', 'import:job:create',
-            'audit:log:read', 'report:attendance:read', 'report:enrollment:read'
+            'audit:log:read', 'report:attendance:read', 'report:enrollment:read',
+            // Frontend navigation codes
+            'manage:timetables', 'manage:rooms', 'manage:schedules', 'manage:student-records',
+            'view:reports', 'manage:announcements', 'manage:school', 'manage:departments',
+            'manage:staff', 'view:school-analytics',
+            'manage:courses', 'manage:imports', 'view:student-records', 'view:student-grades',
           ],
         },
         {
-          role: 'lecturer',
+          role: 'director',
           permissions: [
-            'session:read', 'session:start', 'session:end',
-            'attendance:mark', 'attendance:record:read', 'attendance:record:bulk-create',
-            'timetable:slot:read', 'course:read', 'venue:read',
-            'result:bulk:create', 'student:attendance:summary:read'
+            // Frontend navigation codes
+            'manage:school', 'manage:departments', 'manage:staff', 'manage:timetables',
+            'manage:rooms', 'view:school-analytics', 'view:all-school-data',
+            'manage:courses', 'view:student-records', 'view:student-grades', 'view:reports',
           ],
         },
         {
           role: 'hod',
           permissions: [
+            // Granular backend codes
             'department:read', 'department:update', 'course:read', 'course:update',
             'program:read', 'program:update', 'timetable:manage', 'timetable:slot:read',
-            'session:read', 'attendance:record:read', 'student:attendance:summary:read'
+            'session:read', 'attendance:record:read', 'student:attendance:summary:read',
+            // Frontend navigation codes
+            'manage:department', 'manage:courses', 'manage:lecturers',
+            'approve:timetables', 'view:department-analytics', 'view:student-grades',
+          ],
+        },
+        {
+          role: 'lecturer',
+          permissions: [
+            // Granular backend codes
+            'session:read', 'session:start', 'session:end',
+            'attendance:mark', 'attendance:record:read', 'attendance:record:bulk-create',
+            'timetable:slot:read', 'course:read', 'venue:read',
+            'result:bulk:create', 'student:attendance:summary:read',
+            // Frontend navigation codes
+            'manage:sessions', 'start:session', 'end:session', 'mark:attendance',
+            'view:class-roster', 'manage:course-materials',
           ],
         },
         {
           role: 'student',
           permissions: [
-            'timetable:slot:read', 'session:read', 'attendance:student:read', 
-            'result:student:read', 'permission:read:self'
+            // Granular backend codes
+            'timetable:slot:read', 'session:read', 'attendance:student:read',
+            'result:student:read', 'permission:read:self',
+            // Frontend navigation codes
+            'view:timetable', 'view:attendance', 'view:grades', 'view:course-materials', 'join:session',
           ],
+        },
+        {
+          role: 'guardian',
+          permissions: [
+            'view:linked-students', 'view:student-attendance', 'view:student-grades', 'receive:notifications',
+          ],
+        },
+        {
+          role: 'follower',
+          permissions: ['view:public-info', 'view:announcements'],
         },
         {
           role: 'exam-officer',
           permissions: [
-            'result:bulk:create', 'result:student:read', 'course:read', 
-            'class:read', 'academic-year:read'
+            'result:bulk:create', 'result:student:read', 'course:read',
+            'class:read', 'academic-year:read',
           ],
         },
       ];
@@ -159,13 +212,11 @@ export class PermissionsService {
           .map((perm) => `('${schoolId}', '${mapping.role}', '${perm}')`)
           .join(',');
 
-        if (values) {
-          await manager.query(`
-            INSERT INTO "role_permissions" (school_id, role, permission_id)
-            VALUES ${values}
-            ON CONFLICT (school_id, role, permission_id) DO NOTHING;
-          `);
-        }
+        await manager.query(`
+          INSERT INTO "role_permissions" (school_id, role, permission_id)
+          VALUES ${values}
+          ON CONFLICT (school_id, role, permission_id) DO NOTHING;
+        `);
       }
     });
   }

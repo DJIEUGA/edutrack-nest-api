@@ -16,22 +16,20 @@ export class RolesService {
 
   async listUserRolesBySchool(userId: string, schoolId: string) {
     const rows = await this.dataSource.query(
-      `SELECT 
-         ur.*, 
-         r.name as dynamic_role_name, 
-         r.code as dynamic_role_code,
+      `SELECT
+         ur.*,
+         dr.name as dynamic_role_name,
+         dr.code as dynamic_role_code,
          COALESCE(
-           (SELECT json_agg(p.code)
+           (SELECT json_agg(rp.permission_id)
             FROM role_permissions rp
-            JOIN permissions p ON rp.permission_id = p.id
-            WHERE rp.role_id = r.id
+            WHERE rp.school_id = ur.school_id
+              AND rp.role = ur.role::text
            ),
            '[]'::json
          ) as db_permissions
        FROM user_roles ur
-       LEFT JOIN roles r ON 
-         ur.role_id = r.id OR 
-         (ur.role_id IS NULL AND r.is_system = true AND r.code = ur.role::text)
+       LEFT JOIN dynamic_roles dr ON ur.role_id = dr.id
        WHERE ur.user_id = $1 AND ur.school_id = $2`,
       [userId, schoolId],
     );
@@ -56,10 +54,10 @@ export class RolesService {
     roleId?: string;
     departmentId?: string;
   }) {
-    // If a dynamic roleId is provided, verify it exists and is accessible to this school
+    // If a dynamic roleId is provided, verify it exists and belongs to this school
     if (params.roleId) {
       const [role] = await this.dataSource.query(
-        'SELECT id FROM roles WHERE id = $1 AND (school_id = $2 OR is_system = true)',
+        'SELECT id FROM dynamic_roles WHERE id = $1 AND school_id = $2',
         [params.roleId, params.schoolId],
       );
       if (!role) throw new NotFoundError('Dynamic role not found or inaccessible');
