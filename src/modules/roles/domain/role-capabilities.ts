@@ -62,6 +62,10 @@ export const ROLE_CAPABILITIES: Record<UserRole, ReadonlySet<string>> = {
     // Gap permissions resolved
     'manage:imports',
     'view:student-records',
+    // Class management
+    'manage:classes',
+    'view:classmates',
+    'manage:enrollments',
   ]),
 
   admin: new Set([
@@ -95,6 +99,10 @@ export const ROLE_CAPABILITIES: Record<UserRole, ReadonlySet<string>> = {
     'manage:imports',
     'view:student-records',
     'view:student-grades',
+    // Class management
+    'manage:classes',
+    'view:classmates',
+    'manage:enrollments',
   ]),
 
   director: new Set([
@@ -118,6 +126,10 @@ export const ROLE_CAPABILITIES: Record<UserRole, ReadonlySet<string>> = {
     'view:student-records',
     'view:student-grades',
     'view:reports',
+    // Class management
+    'manage:classes',
+    'view:classmates',
+    'manage:enrollments',
   ]),
 
   hod: new Set([
@@ -137,6 +149,9 @@ export const ROLE_CAPABILITIES: Record<UserRole, ReadonlySet<string>> = {
     'view:department-analytics',
     // Gap permissions resolved
     'view:student-grades',
+    // Class management
+    'manage:classes',
+    'view:classmates',
   ]),
 
   lecturer: new Set([
@@ -158,6 +173,7 @@ export const ROLE_CAPABILITIES: Record<UserRole, ReadonlySet<string>> = {
     'mark:attendance',
     'view:class-roster',
     'manage:course-materials',
+    'view:classmates',
   ]),
 
   student: new Set([
@@ -173,6 +189,7 @@ export const ROLE_CAPABILITIES: Record<UserRole, ReadonlySet<string>> = {
     'view:grades',
     'view:course-materials',
     'join:session',
+    'view:classmates',
   ]),
 
   guardian: new Set([

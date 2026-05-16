@@ -14,12 +14,12 @@ These are the permissions currently defined in the shared role capability map.
 
 | Role | Permissions |
 | --- | --- |
-| owner | manage:organization, manage:schools, manage:users, manage:billing, view:analytics, view:all-data |
-| admin | manage:timetables, manage:rooms, manage:schedules, manage:student-records, view:reports, manage:announcements |
-| director | manage:school, manage:departments, manage:staff, manage:timetables, manage:rooms, view:school-analytics, view:all-school-data |
-| hod | manage:department, manage:courses, manage:lecturers, approve:timetables, view:department-analytics |
-| lecturer | manage:sessions, start:session, end:session, mark:attendance, view:class-roster, manage:course-materials |
-| student | view:timetable, view:attendance, view:grades, view:course-materials, join:session |
+| owner | manage:organization, manage:schools, manage:users, manage:billing, view:analytics, view:all-data, manage:classes, manage:enrollments, view:classmates |
+| admin | manage:timetables, manage:rooms, manage:schedules, manage:student-records, view:reports, manage:announcements, manage:classes, manage:enrollments, view:classmates |
+| director | manage:school, manage:departments, manage:staff, manage:timetables, manage:rooms, view:school-analytics, view:all-school-data, manage:classes, manage:enrollments, view:classmates |
+| hod | manage:department, manage:courses, manage:lecturers, approve:timetables, view:department-analytics, manage:classes, view:classmates |
+| lecturer | manage:sessions, start:session, end:session, mark:attendance, view:class-roster, manage:course-materials, view:classmates |
+| student | view:timetable, view:attendance, view:grades, view:course-materials, join:session, view:classmates |
 | guardian | view:linked-students, view:student-attendance, view:student-grades, receive:notifications |
 | follower | view:public-info, view:announcements |
 
@@ -46,6 +46,12 @@ The school workspace sidebar also checks the following permission keys.
 | Performance | view:student-grades |
 | Students | view:linked-students |
 | Settings | manage:school |
+
+## Workspace Navigation Permissions (updated)
+
+| Workspace item | Permission |
+| --- | --- |
+| Classes | manage:classes |
 
 ## Backend Requirements
 
@@ -90,6 +96,31 @@ The backend should support at least the following capability set, because the fr
 - receive:notifications
 - view:public-info
 - view:announcements
+- manage:classes
+- view:classmates
+- manage:enrollments
+
+## Class Management Feature
+
+### Auto-split behaviour
+- A class with `maxCapacity` set is automatically split when its student count reaches that threshold.
+- The split is alphabetical by full name. The first half (ceil(n/2)) goes to **ClassA**; the second half goes to **ClassB**.
+- ClassA inherits all course assignments, timetable slots, and session records (via `course_assignments` reassignment).
+- ClassB starts empty — admins must manually assign courses and timetable.
+- The original class becomes a **group label** (`is_group = true`) and cannot receive new students.
+- Splitting is one level deep only (no splitting a sub-class).
+- A manual split endpoint (`POST /schools/:schoolId/classes/:classId/split`) is also available for owner/admin/director.
+
+### Enrollment flow
+- Enrollment is a formal request process: student or admin submits `POST /classes/:classId/enrollment-requests`.
+- An owner/admin/director approves (`PATCH /enrollment-requests/:requestId/approve`) or rejects.
+- If the class is at capacity, approval requires `overrideCap: true` in the request body.
+- On approval, if the new count reaches `maxCapacity`, auto-split fires automatically.
+- Every class assignment and transfer is recorded in `class_transfer_logs` with the actor's user ID.
+
+### Student portal
+- `GET /schools/:schoolId/classes/my-class` returns the authenticated student's class overview:
+  timetable, active sessions, enrolled courses with lecturers, classmates, own attendance, and grades.
 
 ## Gaps To Reconcile
 

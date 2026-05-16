@@ -1,5 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsString, IsUUID, Length, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Length,
+  Min,
+} from 'class-validator';
 
 export class CreateClassDto {
   @ApiProperty()
@@ -26,6 +34,12 @@ export class CreateClassDto {
   @IsInt()
   @Min(1)
   level?: number;
+
+  @ApiPropertyOptional({ description: 'Max students before auto-split is triggered' })
+  @IsOptional()
+  @IsInt()
+  @Min(2)
+  maxCapacity?: number;
 }
 
 export class UpdateClassDto {
@@ -35,14 +49,62 @@ export class UpdateClassDto {
   @Length(1, 100)
   name?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ nullable: true })
   @IsOptional()
   @IsUUID()
-  programId?: string;
+  programId?: string | null;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ nullable: true })
   @IsOptional()
   @IsInt()
   @Min(1)
-  level?: number;
+  level?: number | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsInt()
+  @Min(2)
+  maxCapacity?: number | null;
+}
+
+export class SetCapacityDto {
+  @ApiProperty({ description: 'Max students before auto-split is triggered' })
+  @IsInt()
+  @Min(2)
+  maxCapacity!: number;
+}
+
+export class EnrollmentRequestDto {
+  @ApiProperty({ description: 'Student ID to enroll into the class' })
+  @IsUUID()
+  studentId!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class ApproveEnrollmentDto {
+  @ApiPropertyOptional({
+    default: false,
+    description: 'Set true to approve even when the class is at max capacity',
+  })
+  @IsOptional()
+  @IsBoolean()
+  overrideCap?: boolean;
+}
+
+export class RejectEnrollmentDto {
+  @ApiPropertyOptional({ description: 'Optional reason for rejection' })
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class TransferStudentDto {
+  @ApiPropertyOptional({ description: 'Reason for the transfer (stored in audit trail)' })
+  @IsOptional()
+  @IsString()
+  reason?: string;
 }

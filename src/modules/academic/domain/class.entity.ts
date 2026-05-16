@@ -31,6 +31,18 @@ export class ClassEntity {
   @Column({ type: 'int', nullable: true })
   level?: number | null;
 
+  @Column({ name: 'max_capacity', type: 'int', nullable: true })
+  maxCapacity?: number | null;
+
+  @Column({ name: 'parent_class_id', type: 'uuid', nullable: true })
+  parentClassId?: string | null;
+
+  @Column({ name: 'is_group', type: 'boolean', default: false })
+  isGroup!: boolean;
+
+  @Column({ name: 'split_at', type: 'timestamptz', nullable: true })
+  splitAt?: Date | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 

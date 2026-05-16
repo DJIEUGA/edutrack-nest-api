@@ -5,6 +5,8 @@ import { RolesModule } from '@modules/roles/roles.module';
 // Domain entities
 import { AcademicYear } from './domain/academic-year.entity';
 import { ClassEntity } from './domain/class.entity';
+import { ClassEnrollmentRequest } from './domain/class-enrollment-request.entity';
+import { ClassTransferLog } from './domain/class-transfer-log.entity';
 import { Course } from './domain/course.entity';
 import { CourseAssignment } from './domain/course-assignment.entity';
 import { Program } from './domain/program.entity';
@@ -31,6 +33,8 @@ import { SemestersService } from './application/semesters.service';
 // Repositories
 import { AcademicYearRepository } from './infrastructure/academic-year.repository';
 import { ClassRepository } from './infrastructure/class.repository';
+import { ClassEnrollmentRequestRepository } from './infrastructure/class-enrollment-request.repository';
+import { ClassTransferLogRepository } from './infrastructure/class-transfer-log.repository';
 import { CourseAssignmentRepository } from './infrastructure/course-assignment.repository';
 import { CoursesRepository } from './infrastructure/courses.repository';
 import { DepartmentRepository } from './infrastructure/department.repository';
@@ -42,6 +46,8 @@ import { SemesterRepository } from './infrastructure/semester.repository';
     TypeOrmModule.forFeature([
       AcademicYear,
       ClassEntity,
+      ClassEnrollmentRequest,
+      ClassTransferLog,
       Course,
       CourseAssignment,
       Program,
@@ -68,6 +74,8 @@ import { SemesterRepository } from './infrastructure/semester.repository';
     SemestersService,
     AcademicYearRepository,
     ClassRepository,
+    ClassEnrollmentRequestRepository,
+    ClassTransferLogRepository,
     CourseAssignmentRepository,
     CoursesRepository,
     DepartmentRepository,
