@@ -2,8 +2,9 @@ import { Injectable, Inject } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { UserRole } from '@common/types/role.types';
-import { NotFoundError } from '@common/errors/domain.errors';
+import { ForbiddenError, NotFoundError } from '@common/errors/domain.errors';
 import { ROLE_CAPABILITIES } from '../domain/role-capabilities';
+import { canManageRole } from '../domain/staff-hierarchy';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 
@@ -54,6 +55,17 @@ export class RolesService {
     roleId?: string;
     departmentId?: string;
   }) {
+    // Hierarchy enforcement: actor must be able to manage the target role
+    const actorRoles = await this.listRolesForUser(params.actorUserId, params.schoolId).then(
+      (rows) => rows.map((r: any) => r.role as UserRole),
+    );
+    if (!canManageRole(actorRoles, params.role)) {
+      throw new ForbiddenError(
+        `Your role does not permit assigning the '${params.role}' role`,
+        { actorRoles, targetRole: params.role },
+      );
+    }
+
     // If a dynamic roleId is provided, verify it exists and belongs to this school
     if (params.roleId) {
       const [role] = await this.dataSource.query(
@@ -85,6 +97,17 @@ export class RolesService {
     targetUserId: string;
     role: UserRole;
   }) {
+    // Hierarchy enforcement
+    const actorRoles = await this.listRolesForUser(params.actorUserId, params.schoolId).then(
+      (rows) => rows.map((r: any) => r.role as UserRole),
+    );
+    if (!canManageRole(actorRoles, params.role)) {
+      throw new ForbiddenError(
+        `Your role does not permit revoking the '${params.role}' role`,
+        { actorRoles, targetRole: params.role },
+      );
+    }
+
     await this.dataSource.query(
       'DELETE FROM user_roles WHERE user_id = $1 AND school_id = $2 AND role = $3',
       [params.targetUserId, params.schoolId, params.role],

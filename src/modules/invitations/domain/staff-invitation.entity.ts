@@ -23,8 +23,17 @@ export class StaffInvitation {
   @Column({ type: 'enum', enum: [...USER_ROLES] })
   role!: UserRole;
 
+  /** Primary department (kept for back-compat and initial role assignment). */
   @Column({ name: 'department_id', type: 'uuid', nullable: true })
   departmentId?: string | null;
+
+  /**
+   * All departments this invitation is scoped to.
+   * Populated when an HoD invites a lecturer across their managed departments.
+   * Defaults to [departmentId] when only one department is provided.
+   */
+  @Column({ name: 'department_ids', type: 'uuid', array: true, default: [] })
+  departmentIds!: string[];
 
   @Column({ type: 'text', unique: true })
   token!: string;

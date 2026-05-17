@@ -33,8 +33,8 @@ export class RolesController {
 
   @Post()
   @TenantScope({ level: 'school' })
-  @Roles('owner', 'admin')
-  @ApiOperation({ summary: 'Assign a role to a user in this school' })
+  @Roles('owner', 'admin', 'director', 'hod')
+  @ApiOperation({ summary: 'Assign a role to a user in this school (hierarchy enforced in service)' })
   async assign(
     @Param('schoolId') schoolId: string,
     @Body() dto: AssignRoleDto,
@@ -52,9 +52,9 @@ export class RolesController {
 
   @Delete(':userId/:role')
   @TenantScope({ level: 'school' })
-  @Roles('owner', 'admin')
+  @Roles('owner', 'admin', 'director', 'hod')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Revoke a role from a user in this school' })
+  @ApiOperation({ summary: 'Revoke a role from a user in this school (hierarchy enforced in service)' })
   async revoke(
     @Param('schoolId') schoolId: string,
     @Param('userId') userId: string,
@@ -90,8 +90,8 @@ export class RolesController {
 
   @Post(':userId/permissions')
   @TenantScope({ level: 'school' })
-  @Roles('owner', 'admin')
-  @ApiOperation({ summary: 'Assign specific permission to a user' })
+  @Roles('owner', 'admin', 'director', 'hod')
+  @ApiOperation({ summary: 'Assign specific permission to a user (use /staff/:userId/permissions for hierarchy-enforced grant)' })
   async assignPermission(
     @Param('schoolId') schoolId: string,
     @Param('userId') userId: string,
@@ -134,7 +134,7 @@ export class RolesController {
 
   @Delete(':userId/permissions/:permissionCode')
   @TenantScope({ level: 'school' })
-  @Roles('owner', 'admin')
+  @Roles('owner', 'admin', 'director', 'hod')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Revoke specific permission from a user' })
   async revokePermission(

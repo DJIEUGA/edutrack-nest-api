@@ -21,6 +21,7 @@ import { SessionsModule } from './modules/sessions/sessions.module';
 import { StudentsModule } from './modules/students/students.module';
 import { TimetableModule } from './modules/timetable/timetable.module';
 import { SpecialtiesModule } from './modules/specialties/specialties.module';
+import { StaffModule } from './modules/staff/staff.module';
 import { UsersModule } from './modules/users/users.module';
 
 @Module({
@@ -62,6 +63,7 @@ import { UsersModule } from './modules/users/users.module';
     SessionsModule,
     AttendanceModule,
     InvitationsModule,
+    StaffModule,
     ImportsModule,
   ],
 })

@@ -10,7 +10,10 @@ import { StaffInvitation } from './domain/staff-invitation.entity';
 import { StaffInvitationRepository } from './infrastructure/staff-invitation.repository';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([StaffInvitation]), RolesModule],
+  imports: [
+    TypeOrmModule.forFeature([StaffInvitation]),
+    RolesModule,
+  ],
   controllers: [InvitationsController, InvitationAcceptController],
   providers: [InvitationsService, StaffInvitationRepository],
   exports: [InvitationsService],
