@@ -2,7 +2,20 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { Organization } from '../domain/organization.entity';
-import { OrganizationMembership } from '../domain/organization-membership.entity';
+import { OrganizationMembership, MembershipRole } from '../domain/organization-membership.entity';
+
+export type OrganizationWithRole = Organization & { memberRole: MembershipRole };
+
+const ORG_COLUMNS = `
+  o.id,
+  o.name,
+  o.code,
+  o.logo_url       AS "logoUrl",
+  o.created_by     AS "createdBy",
+  o.created_at     AS "createdAt",
+  o.updated_at     AS "updatedAt",
+  m.role           AS "memberRole"
+`;
 
 @Injectable()
 export class OrganizationRepository {
@@ -22,13 +35,25 @@ export class OrganizationRepository {
     return this.orgRepo.findOne({ where: { code } });
   }
 
-  async listForUser(userId: string): Promise<Organization[]> {
-    return this.orgRepo
-      .createQueryBuilder('o')
-      .innerJoin(OrganizationMembership, 'm', 'm.organization_id = o.id')
-      .where('m.user_id = :userId', { userId })
-      .orderBy('o.created_at', 'ASC')
-      .getMany();
+  async listForUser(userId: string): Promise<OrganizationWithRole[]> {
+    return this.dataSource.query(
+      `SELECT ${ORG_COLUMNS}
+       FROM organizations o
+       INNER JOIN organization_memberships m ON m.organization_id = o.id AND m.user_id = $1
+       ORDER BY o.created_at ASC`,
+      [userId],
+    );
+  }
+
+  async findByIdForUser(id: string, userId: string): Promise<OrganizationWithRole | null> {
+    const [row] = await this.dataSource.query(
+      `SELECT ${ORG_COLUMNS}
+       FROM organizations o
+       INNER JOIN organization_memberships m ON m.organization_id = o.id AND m.user_id = $2
+       WHERE o.id = $1`,
+      [id, userId],
+    );
+    return row ?? null;
   }
 
   async update(id: string, patch: { name?: string; code?: string; logoUrl?: string | null }): Promise<Organization | null> {
@@ -40,9 +65,6 @@ export class OrganizationRepository {
     await this.orgRepo.delete({ id });
   }
 
-  /**
-   * Creates an organization and the owner membership atomically.
-   */
   async createWithOwner(input: {
     name: string;
     code: string;

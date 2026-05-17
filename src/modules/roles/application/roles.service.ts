@@ -78,10 +78,10 @@ export class RolesService {
     // Upsert the user role assignment
     await this.dataSource.query(
       `INSERT INTO user_roles (user_id, school_id, role, role_id, department_id)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (user_id, school_id, role) 
-       DO UPDATE SET 
-         role_id = EXCLUDED.role_id, 
+       VALUES ($1, $2, $3::user_role, $4, $5)
+       ON CONFLICT (user_id, school_id, role)
+       DO UPDATE SET
+         role_id = EXCLUDED.role_id,
          department_id = EXCLUDED.department_id,
          updated_at = now()`,
       [params.targetUserId, params.schoolId, params.role, params.roleId, params.departmentId],
@@ -109,7 +109,7 @@ export class RolesService {
     }
 
     await this.dataSource.query(
-      'DELETE FROM user_roles WHERE user_id = $1 AND school_id = $2 AND role = $3',
+      'DELETE FROM user_roles WHERE user_id = $1 AND school_id = $2 AND role = $3::user_role',
       [params.targetUserId, params.schoolId, params.role],
     );
     await this.cacheManager.del(`user_permissions:${params.targetUserId}:${params.schoolId}`);

@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { ConflictError, ForbiddenError, NotFoundError } from '@common/errors/domain.errors';
 import { TenantMembershipService } from '@modules/roles/application/tenant-membership.service';
+import { MembershipRole } from '../domain/organization-membership.entity';
 import { Organization } from '../domain/organization.entity';
-import { OrganizationRepository } from '../infrastructure/organization.repository';
+import { OrganizationRepository, OrganizationWithRole } from '../infrastructure/organization.repository';
 
 @Injectable()
 export class OrganizationsService {
@@ -11,14 +12,12 @@ export class OrganizationsService {
     private readonly memberships: TenantMembershipService,
   ) {}
 
-  listForUser(userId: string): Promise<Organization[]> {
+  listForUser(userId: string): Promise<OrganizationWithRole[]> {
     return this.orgs.listForUser(userId);
   }
 
-  async getForUser(organizationId: string, userId: string): Promise<Organization> {
-    const allowed = await this.memberships.userBelongsToOrganization(userId, organizationId);
-    if (!allowed) throw new NotFoundError('Organization not found', { organizationId });
-    const org = await this.orgs.findById(organizationId);
+  async getForUser(organizationId: string, userId: string): Promise<OrganizationWithRole> {
+    const org = await this.orgs.findByIdForUser(organizationId, userId);
     if (!org) throw new NotFoundError('Organization not found', { organizationId });
     return org;
   }
@@ -28,17 +27,18 @@ export class OrganizationsService {
     code: string;
     logoUrl?: string;
     ownerUserId: string;
-  }): Promise<Organization> {
+  }): Promise<OrganizationWithRole> {
     const existing = await this.orgs.findByCode(input.code);
     if (existing) {
       throw new ConflictError('Organization code already in use', { code: input.code });
     }
-    return this.orgs.createWithOwner({
+    const org = await this.orgs.createWithOwner({
       name: input.name,
       code: input.code,
       logoUrl: input.logoUrl,
       ownerUserId: input.ownerUserId,
     });
+    return { ...org, memberRole: 'owner' as MembershipRole };
   }
 
   async update(

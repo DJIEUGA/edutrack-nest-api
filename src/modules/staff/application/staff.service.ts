@@ -37,7 +37,7 @@ export class StaffService {
        JOIN user_roles ur ON u.id = ur.user_id AND ur.school_id = $1
        LEFT JOIN departments d ON ur.department_id = d.id
        WHERE ur.role = ANY($2::user_role[])
-         AND ($3::text IS NULL OR ur.role = $3)
+         AND ($3::text IS NULL OR ur.role = $3::user_role)
          AND ($4::uuid IS NULL OR ur.department_id = $4)
          AND ($5::text IS NULL OR p.full_name ILIKE $5 OR u.email ILIKE $5)
        GROUP BY u.id, p.full_name, p.avatar_url, p.phone, sm.created_at
@@ -138,7 +138,7 @@ export class StaffService {
 
     // Verify target has the fromRole
     const [existingRole] = await this.dataSource.query(
-      `SELECT id FROM user_roles WHERE user_id = $1 AND school_id = $2 AND role = $3`,
+      `SELECT id FROM user_roles WHERE user_id = $1 AND school_id = $2 AND role = $3::user_role`,
       [input.targetUserId, input.schoolId, input.fromRole],
     );
     if (!existingRole) {
@@ -150,7 +150,7 @@ export class StaffService {
 
     // Prevent assigning a role the target already has
     const [alreadyHas] = await this.dataSource.query(
-      `SELECT id FROM user_roles WHERE user_id = $1 AND school_id = $2 AND role = $3`,
+      `SELECT id FROM user_roles WHERE user_id = $1 AND school_id = $2 AND role = $3::user_role`,
       [input.targetUserId, input.schoolId, input.toRole],
     );
     if (alreadyHas) {
@@ -161,13 +161,13 @@ export class StaffService {
 
     await this.dataSource.transaction(async (manager) => {
       await manager.query(
-        `DELETE FROM user_roles WHERE user_id = $1 AND school_id = $2 AND role = $3`,
+        `DELETE FROM user_roles WHERE user_id = $1 AND school_id = $2 AND role = $3::user_role`,
         [input.targetUserId, input.schoolId, input.fromRole],
       );
 
       await manager.query(
         `INSERT INTO user_roles (user_id, school_id, role, department_id)
-         VALUES ($1, $2, $3, $4)`,
+         VALUES ($1, $2, $3::user_role, $4)`,
         [input.targetUserId, input.schoolId, input.toRole, input.departmentId ?? null],
       );
 

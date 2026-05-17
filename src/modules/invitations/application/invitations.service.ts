@@ -121,7 +121,7 @@ export class InvitationsService {
     // 4. Prevent duplicate pending invitations to the same email+role
     const existing = await this.dataSource.query(
       `SELECT id FROM staff_invitations
-       WHERE school_id = $1 AND email = $2 AND role = $3 AND status = 'pending'`,
+       WHERE school_id = $1 AND email = $2 AND role = $3::user_role AND status = 'pending'`,
       [input.schoolId, input.email.toLowerCase(), input.role],
     );
     if (existing.length > 0) {
