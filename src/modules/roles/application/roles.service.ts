@@ -56,8 +56,8 @@ export class RolesService {
     departmentId?: string;
   }) {
     // Hierarchy enforcement: actor must be able to manage the target role
-    const actorRoles = await this.listRolesForUser(params.actorUserId, params.schoolId).then(
-      (rows) => rows.map((r: any) => r.role as UserRole),
+    const actorRoles = await this.listUserRolesBySchool(params.actorUserId, params.schoolId).then(
+      (rows) => rows.map((r: { role: string }) => r.role as UserRole),
     );
     if (!canManageRole(actorRoles, params.role)) {
       throw new ForbiddenError(
@@ -98,8 +98,8 @@ export class RolesService {
     role: UserRole;
   }) {
     // Hierarchy enforcement
-    const actorRoles = await this.listRolesForUser(params.actorUserId, params.schoolId).then(
-      (rows) => rows.map((r: any) => r.role as UserRole),
+    const actorRoles = await this.listUserRolesBySchool(params.actorUserId, params.schoolId).then(
+      (rows) => rows.map((r: { role: string }) => r.role as UserRole),
     );
     if (!canManageRole(actorRoles, params.role)) {
       throw new ForbiddenError(
