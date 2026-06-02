@@ -19,14 +19,14 @@ export class SessionsController {
   @Get()
   @TenantScope({ level: 'school' })
   @Roles('owner', 'admin', 'director', 'hod', 'lecturer', 'student', 'guardian')
-  @ApiOperation({ summary: 'List all sessions for a school' })
-  list(@Param('schoolId') schoolId: string) {
-    return this.sessions.list(schoolId);
+  @ApiOperation({ summary: 'List sessions visible to the current user' })
+  list(@Param('schoolId') schoolId: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.sessions.list(schoolId, user.userId);
   }
 
   @Post()
   @TenantScope({ level: 'school' })
-  @Roles('owner', 'admin', 'hod') // Lecturers can only start/end their assigned sessions, not create new ones ad-hoc
+  @Roles('owner', 'admin', 'hod', 'lecturer')
   @ApiOperation({ summary: 'Create a new session (ad-hoc or from timetable slot)' })
   create(
     @Param('schoolId') schoolId: string,
@@ -58,5 +58,18 @@ export class SessionsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.sessions.endSession(sessionId, schoolId, user.userId);
+  }
+
+  @Post(':sessionId/cancel')
+  @TenantScope({ level: 'school' })
+  @Roles('owner', 'admin', 'lecturer')
+  @ApiOperation({ summary: 'Cancel a scheduled session' })
+  cancelSession(
+    @Param('schoolId') schoolId: string,
+    @Param('sessionId') sessionId: string,
+    @Body() dto: { reason: string },
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.sessions.cancelSession(sessionId, schoolId, user.userId, dto.reason);
   }
 }

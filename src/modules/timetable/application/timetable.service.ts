@@ -1,35 +1,9 @@
 import { Injectable } from '@nestjs/common';
-// Avoid importing 'typeorm' types at runtime in this temp context — provide a lightweight alias
-// to satisfy typings when the 'typeorm' package/types are not available.
-type DataSource = any;
 import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 import { ConflictError, NotFoundError } from '@common/errors/domain.errors';
 import { TimetableRepository } from '../infrastructure/timetable.repository';
 import { VenuesRepository } from '../../schools/infrastructure/venues.repository';
-
-interface CreateTimetableDto {
-  academicYearId: string;
-  courseAssignmentId: string;
-  dayOfWeek: number;
-  startTime: string;
-  endTime: string;
-  venue?: string;
-}
-
-interface UpdateTimetableDto {
-  dayOfWeek?: number;
-  startTime?: string;
-  endTime?: string;
-  venue?: string;
-}
-
-interface ListResponse {
-  [key: string]: any;
-}
-
-interface RemoveResponse {
-  success: boolean;
-}
 
 @Injectable()
 export class TimetableService {
@@ -53,10 +27,8 @@ export class TimetableService {
     venue?: string;
   }) {
     return await this.dataSource.transaction(async (manager: any) => {
-      // Section 14.4: Conflict Detection (Venue/Time overlap)
       if (dto.venue) {
-        // Validate that the venue is managed in the school's venues repository
-        const venueExists = await this.venuesRepository.findByName(dto.venue, schoolId);
+        const venueExists = await this.venuesRepository.findById(dto.venue, schoolId);
         if (!venueExists) {
           throw new Error(`Venue "${dto.venue}" is not registered. Please create it in the Venues settings first.`);
         }
@@ -74,7 +46,18 @@ export class TimetableService {
         }
       }
 
-      return this.timetableRepository.create(manager, schoolId, dto as any); // Cast to any as dto might not perfectly match repo's internal type
+      const slot = await this.timetableRepository.create(manager, schoolId, dto as any);
+
+      await this.generateSessionsForSlot(
+        manager,
+        slot.id,
+        schoolId,
+        dto.courseAssignmentId,
+        dto.academicYearId,
+        dto.dayOfWeek,
+      );
+
+      return slot;
     });
   }
 
@@ -89,8 +72,7 @@ export class TimetableService {
       const venue = dto.venue !== undefined ? dto.venue : existing.venue;
 
       if (venue) {
-        // Validate that the venue is managed in the school's venues repository
-        const venueExists = await this.venuesRepository.findByName(venue, schoolId);
+        const venueExists = await this.venuesRepository.findById(venue, schoolId);
         if (!venueExists) {
           throw new Error(`Venue "${venue}" is not registered. Please create it in the Venues settings first.`);
         }
@@ -109,13 +91,77 @@ export class TimetableService {
         }
       }
 
-      return this.timetableRepository.update(manager, id, schoolId, { dayOfWeek, startTime, endTime, venue } as any); // Cast to any
+      return this.timetableRepository.update(manager, id, schoolId, { dayOfWeek, startTime, endTime, venue } as any);
     });
   }
 
   async remove(schoolId: string, id: string) {
-    const success = await this.timetableRepository.delete(id, schoolId);
-    if (!success) throw new NotFoundError('Timetable slot not found');
-    return { success: true };
+    return await this.dataSource.transaction(async (manager: any) => {
+      // Delete future scheduled sessions so the slot FK can be cleared
+      await manager.query(
+        `DELETE FROM sessions
+         WHERE timetable_slot_id = $1 AND status = 'scheduled' AND scheduled_date >= CURRENT_DATE`,
+        [id],
+      );
+
+      // Orphan past sessions (completed/live/cancelled) so the slot row can be deleted
+      await manager.query(
+        `UPDATE sessions SET timetable_slot_id = NULL WHERE timetable_slot_id = $1`,
+        [id],
+      );
+
+      const result = await manager.query(
+        `DELETE FROM timetable_slots WHERE id = $1 AND school_id = $2`,
+        [id, schoolId],
+      );
+
+      if (result[1] === 0) throw new NotFoundError('Timetable slot not found');
+      return { success: true };
+    });
+  }
+
+  // Generates one session row per occurrence of dayOfWeek within the academic year.
+  // dayOfWeek follows JS convention: 0 = Sunday, 1 = Monday, …, 6 = Saturday.
+  private async generateSessionsForSlot(
+    manager: any,
+    slotId: string,
+    schoolId: string,
+    courseAssignmentId: string,
+    academicYearId: string,
+    dayOfWeek: number,
+  ): Promise<void> {
+    const [year] = await manager.query(
+      `SELECT start_date as "startDate", end_date as "endDate"
+       FROM academic_years WHERE id = $1 AND school_id = $2`,
+      [academicYearId, schoolId],
+    );
+    if (!year) return;
+
+    const start = new Date(year.startDate);
+    const end = new Date(year.endDate);
+
+    // Advance start to the first matching weekday
+    const daysToAdd = (dayOfWeek - start.getUTCDay() + 7) % 7;
+    start.setUTCDate(start.getUTCDate() + daysToAdd);
+
+    const dates: string[] = [];
+    const cursor = new Date(start);
+    while (cursor <= end) {
+      dates.push(cursor.toISOString().split('T')[0]);
+      cursor.setUTCDate(cursor.getUTCDate() + 7);
+    }
+
+    if (dates.length === 0) return;
+
+    // Bulk insert: $1 = school_id, $2 = course_assignment_id, $3 = slot_id, $4… = dates
+    const placeholders = dates
+      .map((_, i) => `($1, $2, $3, $${i + 4}, 'scheduled')`)
+      .join(', ');
+
+    await manager.query(
+      `INSERT INTO sessions (school_id, course_assignment_id, timetable_slot_id, scheduled_date, status)
+       VALUES ${placeholders}`,
+      [schoolId, courseAssignmentId, slotId, ...dates],
+    );
   }
 }

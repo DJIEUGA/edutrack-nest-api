@@ -26,7 +26,7 @@ export class TimetableController {
 
   @Post()
   @TenantScope({ level: 'school' })
-  @Roles('owner', 'admin', 'hod')
+  @Roles('owner', 'admin', 'hod', 'lecturer')
   @ApiOperation({ summary: 'Create a new timetable slot' })
   create(
     @Param('schoolId') schoolId: string,
@@ -37,7 +37,7 @@ export class TimetableController {
 
   @Patch(':slotId')
   @TenantScope({ level: 'school' })
-  @Roles('owner', 'admin', 'hod') // Lecturers might have 'reschedule-own' capability, requiring finer-grained check
+  @Roles('owner', 'admin', 'hod', 'lecturer') // Lecturers might have 'reschedule-own' capability, requiring finer-grained check
   @ApiOperation({ summary: 'Update an existing timetable slot (reschedule)' })
   update(
     @Param('schoolId') schoolId: string,
@@ -49,7 +49,7 @@ export class TimetableController {
 
   @Delete(':slotId')
   @TenantScope({ level: 'school' })
-  @Roles('owner', 'admin', 'hod')
+  @Roles('owner', 'admin', 'hod', 'lecturer')
   @ApiOperation({ summary: 'Remove a timetable slot' })
   remove(@Param('schoolId') schoolId: string, @Param('slotId') slotId: string) {
     return this.timetable.remove(schoolId, slotId);

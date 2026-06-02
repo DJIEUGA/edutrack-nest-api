@@ -7,7 +7,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
-export type SessionStatus = 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+export type SessionStatus = 'scheduled' | 'live' | 'completed' | 'cancelled';
 
 @Entity({ name: 'sessions' })
 @Index(['schoolId', 'scheduledDate'])
@@ -30,7 +30,7 @@ export class Session {
 
   @Column({
     type: 'enum',
-    enum: ['scheduled', 'in_progress', 'completed', 'cancelled'],
+    enum: ['scheduled', 'live', 'completed', 'cancelled'],
     default: 'scheduled',
   })
   status!: SessionStatus;
@@ -55,6 +55,12 @@ export class Session {
 
   @Column({ name: 'ended_by', type: 'uuid', nullable: true })
   endedBy?: string | null;
+
+  @Column({ name: 'cancellation_reason', type: 'text', nullable: true })
+  cancellationReason?: string | null;
+
+  @Column({ name: 'cancelled_by', type: 'uuid', nullable: true })
+  cancelledBy?: string | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
