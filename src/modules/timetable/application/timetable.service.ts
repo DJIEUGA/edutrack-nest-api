@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { ConflictError, NotFoundError } from '@common/errors/domain.errors';
+import { buildCourseAssignmentScope } from '@common/scope/course-assignment-scope';
+import { RoleResolverService } from '@modules/roles/application/role-resolver.service';
 import { TimetableRepository } from '../infrastructure/timetable.repository';
 import { VenuesRepository } from '../../schools/infrastructure/venues.repository';
 
@@ -12,10 +14,14 @@ export class TimetableService {
     private readonly dataSource: DataSource,
     private readonly timetableRepository: TimetableRepository,
     private readonly venuesRepository: VenuesRepository,
+    private readonly roleResolver: RoleResolverService,
   ) {}
 
-  async list(schoolId: string, academicYearId?: string) {
-    return this.timetableRepository.list(schoolId, academicYearId);
+  async list(schoolId: string, actorId: string, academicYearId?: string) {
+    const roles = await this.roleResolver.listRolesForUser(actorId, schoolId);
+    // $1 = schoolId, $2 = academicYearId — scope starts at $3
+    const scope = buildCourseAssignmentScope(roles, actorId, schoolId, 3);
+    return this.timetableRepository.list(schoolId, academicYearId, scope);
   }
 
   async create(schoolId: string, dto: {
@@ -57,7 +63,14 @@ export class TimetableService {
         dto.dayOfWeek,
       );
 
-      return slot;
+      const [next] = await manager.query(
+        `SELECT id FROM sessions
+         WHERE timetable_slot_id = $1 AND scheduled_date >= CURRENT_DATE AND status = 'scheduled'
+         ORDER BY scheduled_date ASC LIMIT 1`,
+        [slot.id],
+      );
+
+      return { ...slot, nextSessionId: next?.id ?? null };
     });
   }
 

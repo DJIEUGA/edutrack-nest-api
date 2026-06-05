@@ -6,14 +6,27 @@ import { DataSource, EntityManager } from 'typeorm';
 export class TimetableRepository {
   constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
 
-  async list(schoolId: string, academicYearId?: string) {
+  async list(
+    schoolId: string,
+    academicYearId?: string,
+    scope: { sql: string; params: unknown[] } = { sql: '', params: [] },
+  ) {
     return this.dataSource.query(
       `SELECT ts.id, ts.school_id as "schoolId", ts.academic_year_id as "academicYearId",
               ts.course_assignment_id as "courseAssignmentId", ts.day_of_week as "dayOfWeek",
-              ts.start_time as "startTime", ts.end_time as "endTime", ts.venue
+              ts.start_time as "startTime", ts.end_time as "endTime", ts.venue,
+              (SELECT s.id FROM sessions s
+               WHERE s.timetable_slot_id = ts.id
+                 AND s.scheduled_date >= CURRENT_DATE
+                 AND s.status = 'scheduled'
+               ORDER BY s.scheduled_date ASC
+               LIMIT 1) as "nextSessionId"
        FROM timetable_slots ts
-       WHERE ts.school_id = $1 AND ($2::uuid IS NULL OR ts.academic_year_id = $2)`,
-      [schoolId, academicYearId || null],
+       JOIN course_assignments ca ON ca.id = ts.course_assignment_id
+       WHERE ts.school_id = $1 AND ($2::uuid IS NULL OR ts.academic_year_id = $2)
+       ${scope.sql}
+       ORDER BY ts.day_of_week, ts.start_time`,
+      [schoolId, academicYearId || null, ...scope.params],
     );
   }
 

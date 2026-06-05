@@ -1,5 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { Roles } from '@common/decorators/roles.decorator';
 import { TenantScope } from '@common/decorators/tenant-scope.decorator';
@@ -8,6 +8,7 @@ import { RolesGuard } from '@common/guards/roles.guard';
 import { TenantGuard } from '@common/guards/tenant.guard';
 import { AuthenticatedUser } from '@common/types/authenticated-request';
 import { TimetableService } from '../application/timetable.service';
+import { CreateTimetableSlotDto, TimetableSlotResponseDto } from './dto/timetable-slot.dto';
 
 @ApiTags('timetable')
 @ApiBearerAuth()
@@ -19,19 +20,23 @@ export class TimetableController {
   @Get()
   @TenantScope({ level: 'school' })
   @Roles('owner', 'admin', 'director', 'hod', 'lecturer', 'student', 'guardian')
-  @ApiOperation({ summary: 'List timetable slots for a school' })
-  list(@Param('schoolId') schoolId: string) {
-    return this.timetable.list(schoolId);
+  @ApiOperation({ summary: 'List timetable slots visible to the current user' })
+  @ApiQuery({ name: 'academicYearId', required: false, type: String })
+  @ApiResponse({ status: 200, type: [TimetableSlotResponseDto] })
+  list(
+    @Param('schoolId') schoolId: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('academicYearId') academicYearId?: string,
+  ) {
+    return this.timetable.list(schoolId, user.userId, academicYearId);
   }
 
   @Post()
   @TenantScope({ level: 'school' })
   @Roles('owner', 'admin', 'hod', 'lecturer')
   @ApiOperation({ summary: 'Create a new timetable slot' })
-  create(
-    @Param('schoolId') schoolId: string,
-    @Body() dto: { academicYearId: string; courseAssignmentId: string; dayOfWeek: number; startTime: string; endTime: string; venue?: string },
-  ) {
+  @ApiResponse({ status: 201, type: TimetableSlotResponseDto })
+  create(@Param('schoolId') schoolId: string, @Body() dto: CreateTimetableSlotDto) {
     return this.timetable.create(schoolId, dto);
   }
 

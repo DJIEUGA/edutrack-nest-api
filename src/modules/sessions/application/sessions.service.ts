@@ -4,6 +4,7 @@ import { DataSource } from 'typeorm';
 import { ForbiddenError, NotFoundError, ValidationError } from '@common/errors/domain.errors';
 import { UserRole } from '@common/types/role.types';
 import { RoleResolverService } from '@modules/roles/application/role-resolver.service';
+import { buildCourseAssignmentScope } from '@common/scope/course-assignment-scope';
 
 class GeoUtils {
   static calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number) {
@@ -31,60 +32,6 @@ export class SessionsService {
     private readonly roleResolver: RoleResolverService,
   ) {}
 
-  // Returns a WHERE clause fragment (starting with AND) and its bound params,
-  // scoping sessions to what the actor is allowed to see.
-  // Assumes the query already has: sessions aliased as "s", course_assignments as "ca".
-  private buildListScopeClause(
-    roles: UserRole[],
-    userId: string,
-    schoolId: string,
-    nextParam: number,
-  ): { sql: string; params: unknown[] } {
-    if (roles.some((r) => PRIVILEGED_ROLES.includes(r))) {
-      return { sql: '', params: [] };
-    }
-    if (roles.includes('hod')) {
-      const p = nextParam;
-      return {
-        sql: `AND EXISTS (
-          SELECT 1 FROM user_roles ur
-          JOIN courses c2 ON c2.department_id = ur.department_id
-          WHERE ur.user_id = $${p} AND ur.role = 'hod' AND ur.school_id = $${p + 1}
-            AND c2.id = ca.course_id
-        )`,
-        params: [userId, schoolId],
-      };
-    }
-    if (roles.includes('lecturer')) {
-      return {
-        sql: `AND ca.lecturer_user_id = $${nextParam}`,
-        params: [userId],
-      };
-    }
-    if (roles.includes('student')) {
-      const p = nextParam;
-      return {
-        sql: `AND EXISTS (
-          SELECT 1 FROM students st
-          WHERE st.user_id = $${p} AND st.school_id = $${p + 1} AND st.class_id = ca.class_id
-        )`,
-        params: [userId, schoolId],
-      };
-    }
-    if (roles.includes('guardian')) {
-      const p = nextParam;
-      return {
-        sql: `AND EXISTS (
-          SELECT 1 FROM guardian_students gs
-          JOIN students st ON st.id = gs.student_id
-          WHERE gs.guardian_user_id = $${p} AND st.school_id = $${p + 1} AND st.class_id = ca.class_id
-        )`,
-        params: [userId, schoolId],
-      };
-    }
-    return { sql: 'AND FALSE', params: [] };
-  }
-
   // Throws 403 if the actor (lecturer) is not assigned to the session's course.
   // Admins and owners pass through unconditionally.
   private async assertSessionAccess(
@@ -111,7 +58,7 @@ export class SessionsService {
 
   async list(schoolId: string, actorId: string) {
     const roles = await this.roleResolver.listRolesForUser(actorId, schoolId);
-    const scope = this.buildListScopeClause(roles, actorId, schoolId, 2);
+    const scope = buildCourseAssignmentScope(roles, actorId, schoolId, 2);
     return this.dataSource.query(
       `SELECT s.id, s.status, s.scheduled_date as "scheduledDate",
               c.code as "courseCode", c.title as "courseTitle",

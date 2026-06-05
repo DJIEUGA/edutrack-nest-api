@@ -39,3 +39,16 @@ export class CreateTimetableSlotDto {
   @IsString()
   venue?: string;
 }
+
+export class TimetableSlotResponseDto {
+  @ApiProperty() id!: string;
+  @ApiProperty() schoolId!: string;
+  @ApiProperty() academicYearId!: string;
+  @ApiProperty() courseAssignmentId!: string;
+  @ApiProperty({ description: '0=Sunday … 6=Saturday', minimum: 0, maximum: 6 }) dayOfWeek!: number;
+  @ApiProperty({ example: '08:00' }) startTime!: string;
+  @ApiProperty({ example: '09:30' }) endTime!: string;
+  @ApiPropertyOptional() venue?: string;
+  @ApiPropertyOptional({ description: 'ID of the next upcoming scheduled session for this slot', type: String, nullable: true })
+  nextSessionId!: string | null;
+}
