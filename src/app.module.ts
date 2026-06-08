@@ -2,6 +2,7 @@ import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/c
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { CacheModule } from '@nestjs/cache-manager';
+import { ScheduleModule } from '@nestjs/schedule';
 import { LoggerModule } from 'nestjs-pino';
 import { appConfig, databaseConfig, jwtConfig, throttleConfig } from './config/app.config';
 import { configValidationSchema } from './config/config.schema';
@@ -23,6 +24,7 @@ import { TimetableModule } from './modules/timetable/timetable.module';
 import { SpecialtiesModule } from './modules/specialties/specialties.module';
 import { StaffModule } from './modules/staff/staff.module';
 import { UsersModule } from './modules/users/users.module';
+import { PromotionModule } from './modules/promotion/promotion.module';
 
 @Module({
   imports: [
@@ -47,6 +49,7 @@ import { UsersModule } from './modules/users/users.module';
       },
     }),
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }]),
+    ScheduleModule.forRoot(),
     DatabaseModule,
     // Domain modules
     AuditModule,
@@ -65,6 +68,7 @@ import { UsersModule } from './modules/users/users.module';
     InvitationsModule,
     StaffModule,
     ImportsModule,
+    PromotionModule,
   ],
 })
 export class AppModule implements NestModule {

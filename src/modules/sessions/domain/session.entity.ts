@@ -7,7 +7,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
-export type SessionStatus = 'scheduled' | 'live' | 'completed' | 'cancelled';
+export type SessionStatus = 'pending_confirmation' | 'scheduled' | 'live' | 'completed' | 'cancelled';
 
 @Entity({ name: 'sessions' })
 @Index(['schoolId', 'scheduledDate'])
@@ -28,11 +28,7 @@ export class Session {
   @Column({ name: 'scheduled_date', type: 'date' })
   scheduledDate!: string;
 
-  @Column({
-    type: 'enum',
-    enum: ['scheduled', 'live', 'completed', 'cancelled'],
-    default: 'scheduled',
-  })
+  @Column({ type: 'text', default: 'scheduled' })
   status!: SessionStatus;
 
   @Column({ name: 'actual_start', type: 'timestamptz', nullable: true })

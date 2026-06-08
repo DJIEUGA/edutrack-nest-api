@@ -4,6 +4,7 @@ import { SessionsController } from './api/sessions.controller';
 import { SessionReportingController } from './api/session-reporting.controller';
 import { SessionsService } from './application/sessions.service';
 import { SessionReportingService } from './application/session-reporting.service';
+import { SessionsPublicService } from './application/sessions-public.service';
 
 @Module({
   imports: [RolesModule],
@@ -14,7 +15,8 @@ import { SessionReportingService } from './application/session-reporting.service
   providers: [
     SessionsService,
     SessionReportingService,
+    SessionsPublicService,
   ],
-  exports: [SessionsService, SessionReportingService],
+  exports: [SessionsService, SessionReportingService, SessionsPublicService],
 })
 export class SessionsModule {}
