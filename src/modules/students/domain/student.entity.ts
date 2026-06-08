@@ -25,6 +25,12 @@ export class Student {
   @Column({ name: 'class_id', type: 'uuid', nullable: true })
   classId?: string | null;
 
+  @Column({ type: 'text', default: 'pending' })
+  status!: string;
+
+  @Column({ name: 'rejection_reason', type: 'text', nullable: true })
+  rejectionReason?: string | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 
