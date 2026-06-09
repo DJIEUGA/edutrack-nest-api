@@ -15,7 +15,7 @@ export class StudentsController {
 
   @Get()
   @TenantScope({ level: 'school' })
-  @Roles('owner', 'admin', 'director')
+  @Roles('owner', 'admin', 'director','lecturer','student')
   async list(
     @Param('schoolId') schoolId: string,
     @Query('status') status?: string,

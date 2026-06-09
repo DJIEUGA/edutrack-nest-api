@@ -99,7 +99,7 @@ export class SessionsService {
               v.latitude as "targetLat", v.longitude as "targetLng"
        FROM sessions s
        LEFT JOIN timetable_slots ts ON s.timetable_slot_id = ts.id
-       LEFT JOIN venues v ON ts.venue = v.id
+       LEFT JOIN venues v ON ts.venue = v.id::text
        WHERE s.id = $1 AND s.school_id = $2`,
       [sessionId, schoolId],
     );

@@ -29,7 +29,9 @@ export class StudentsRepository {
   }
 
   async search(schoolId: string, filters: { programId?: string; level?: number; status?: string; limit?: number; offset?: number }) {
-    const { programId, level, status, limit = 50, offset = 0 } = filters;
+    const { programId, level, status } = filters;
+    const limit = Number.isFinite(filters.limit) ? filters.limit! : 50;
+    const offset = Number.isFinite(filters.offset) ? filters.offset! : 0;
     
     return this.dataSource.query(
       `SELECT 
