@@ -16,7 +16,7 @@ export class VenuesController {
 
   @Get()
   @TenantScope({ level: 'school' })
-  @Roles('owner', 'admin', 'director', 'hod', 'lecturer')
+  @Roles('owner', 'admin', 'director', 'hod', 'lecturer', 'student', 'guardian')
   @ApiOperation({ summary: 'List all venues for a school' })
   list(@Param('schoolId') schoolId: string) {
     return this.venues.list(schoolId);

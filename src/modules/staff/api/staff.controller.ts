@@ -31,7 +31,7 @@ export class StaffController {
 
   @Get()
   @TenantScope({ level: 'school' })
-  @Roles('owner', 'admin', 'director', 'hod', 'lecturer')
+  @Roles('owner', 'admin', 'director', 'hod', 'lecturer', 'student', 'guardian')
   @ApiOperation({ summary: 'List all staff members (admin, director, hod, lecturer) in this school' })
   list(
     @Param('schoolId') schoolId: string,

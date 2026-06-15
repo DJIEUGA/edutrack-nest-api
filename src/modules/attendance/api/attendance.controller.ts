@@ -70,7 +70,7 @@ export class AttendanceController {
 
   @Get('attendance/summary')
   @TenantScope({ level: 'school' })
-  @Roles('owner', 'admin', 'director', 'lecturer')
+  @Roles('owner', 'admin', 'director', 'lecturer','student', 'guardian')
   @ApiOperation({ summary: 'Attendance summary for all students in the school' })
   summary(
     @Param('schoolId') schoolId: string,
