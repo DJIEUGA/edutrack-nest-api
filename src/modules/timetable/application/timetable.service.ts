@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
-import { ConflictError, NotFoundError } from '@common/errors/domain.errors';
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '@common/errors/domain.errors';
 import { buildCourseAssignmentScope } from '@common/scope/course-assignment-scope';
 import { RoleResolverService } from '@modules/roles/application/role-resolver.service';
+import { ScheduleConfigRepository } from '@modules/schools/infrastructure/schedule-config.repository';
 import { TimetableRepository } from '../infrastructure/timetable.repository';
 import { VenuesRepository } from '../../schools/infrastructure/venues.repository';
 
@@ -15,6 +16,7 @@ export class TimetableService {
     private readonly timetableRepository: TimetableRepository,
     private readonly venuesRepository: VenuesRepository,
     private readonly roleResolver: RoleResolverService,
+    private readonly scheduleConfigRepo: ScheduleConfigRepository,
   ) {}
 
   async list(schoolId: string, actorId: string, academicYearId?: string) {
@@ -24,14 +26,24 @@ export class TimetableService {
     return this.timetableRepository.list(schoolId, academicYearId, scope);
   }
 
-  async create(schoolId: string, dto: {
-    academicYearId: string;
-    courseAssignmentId: string;
-    dayOfWeek: number;
-    startTime: string;
-    endTime: string;
-    venue?: string;
-  }) {
+  async create(
+    schoolId: string,
+    actorId: string,
+    roles: string[],
+    dto: {
+      academicYearId: string;
+      courseAssignmentId: string;
+      dayOfWeek: number;
+      startTime: string;
+      endTime: string;
+      venue?: string;
+    },
+  ) {
+    if (roles.includes('lecturer')) {
+      await this.assertLecturerOwnsAssignment(dto.courseAssignmentId, actorId, schoolId);
+    }
+    await this.assertTimeBlockExists(schoolId, dto.startTime, dto.endTime);
+
     return await this.dataSource.transaction(async (manager: any) => {
       if (dto.venue) {
         const venueExists = await this.venuesRepository.findById(dto.venue, schoolId);
@@ -74,15 +86,29 @@ export class TimetableService {
     });
   }
 
-  async update(schoolId: string, id: string, dto: { dayOfWeek?: number; startTime?: string; endTime?: string; venue?: string }) {
+  async update(
+    schoolId: string,
+    id: string,
+    actorId: string,
+    roles: string[],
+    dto: { dayOfWeek?: number; startTime?: string; endTime?: string; venue?: string },
+  ) {
     return await this.dataSource.transaction(async (manager: any) => {
       const existing = await this.timetableRepository.findById(id, schoolId);
       if (!existing) throw new NotFoundError('Timetable slot not found');
 
-      const dayOfWeek = dto.dayOfWeek !== undefined ? dto.dayOfWeek : existing.day_of_week;
-      const startTime = dto.startTime !== undefined ? dto.startTime : existing.start_time;
-      const endTime = dto.endTime !== undefined ? dto.endTime : existing.end_time;
+      if (roles.includes('lecturer')) {
+        await this.assertLecturerOwnsAssignment(existing.courseAssignmentId, actorId, schoolId);
+      }
+
+      const dayOfWeek = dto.dayOfWeek !== undefined ? dto.dayOfWeek : existing.dayOfWeek;
+      const startTime = dto.startTime !== undefined ? dto.startTime : existing.startTime;
+      const endTime = dto.endTime !== undefined ? dto.endTime : existing.endTime;
       const venue = dto.venue !== undefined ? dto.venue : existing.venue;
+
+      if (dto.startTime !== undefined || dto.endTime !== undefined) {
+        await this.assertTimeBlockExists(schoolId, startTime, endTime);
+      }
 
       if (venue) {
         const venueExists = await this.venuesRepository.findById(venue, schoolId);
@@ -108,16 +134,21 @@ export class TimetableService {
     });
   }
 
-  async remove(schoolId: string, id: string) {
+  async remove(schoolId: string, id: string, actorId: string, roles: string[]) {
     return await this.dataSource.transaction(async (manager: any) => {
-      // Delete future scheduled sessions so the slot FK can be cleared
+      const existing = await this.timetableRepository.findById(id, schoolId);
+      if (!existing) throw new NotFoundError('Timetable slot not found');
+
+      if (roles.includes('lecturer')) {
+        await this.assertLecturerOwnsAssignment(existing.courseAssignmentId, actorId, schoolId);
+      }
+
       await manager.query(
         `DELETE FROM sessions
          WHERE timetable_slot_id = $1 AND status = 'scheduled' AND scheduled_date >= CURRENT_DATE`,
         [id],
       );
 
-      // Orphan past sessions (completed/live/cancelled) so the slot row can be deleted
       await manager.query(
         `UPDATE sessions SET timetable_slot_id = NULL WHERE timetable_slot_id = $1`,
         [id],
@@ -133,9 +164,34 @@ export class TimetableService {
     });
   }
 
+  private async assertLecturerOwnsAssignment(
+    courseAssignmentId: string,
+    actorId: string,
+    schoolId: string,
+  ): Promise<void> {
+    const [ca] = await this.dataSource.query(
+      `SELECT lecturer_user_id as "lecturerUserId"
+       FROM course_assignments WHERE id = $1 AND school_id = $2`,
+      [courseAssignmentId, schoolId],
+    );
+    if (!ca) throw new NotFoundError('Course assignment not found');
+    if (ca.lecturerUserId !== actorId) {
+      throw new ForbiddenError('You are not the assigned lecturer for this course assignment');
+    }
+  }
+
+  private async assertTimeBlockExists(schoolId: string, startTime: string, endTime: string): Promise<void> {
+    const exists = await this.scheduleConfigRepo.timeBlockExists(schoolId, startTime, endTime);
+    if (!exists) {
+      throw new ValidationError(
+        `The time ${startTime}–${endTime} does not match any configured school time block`,
+      );
+    }
+  }
+
   // Generates one session row per occurrence of dayOfWeek within the academic year.
   // dayOfWeek follows JS convention: 0 = Sunday, 1 = Monday, …, 6 = Saturday.
-  private async generateSessionsForSlot(
+  async generateSessionsForSlot(
     manager: any,
     slotId: string,
     schoolId: string,
@@ -153,7 +209,6 @@ export class TimetableService {
     const start = new Date(year.startDate);
     const end = new Date(year.endDate);
 
-    // Advance start to the first matching weekday
     const daysToAdd = (dayOfWeek - start.getUTCDay() + 7) % 7;
     start.setUTCDate(start.getUTCDate() + daysToAdd);
 
@@ -166,7 +221,6 @@ export class TimetableService {
 
     if (dates.length === 0) return;
 
-    // Bulk insert: $1 = school_id, $2 = course_assignment_id, $3 = slot_id, $4… = dates
     const placeholders = dates
       .map((_, i) => `($1, $2, $3, $${i + 4}, 'scheduled')`)
       .join(', ');

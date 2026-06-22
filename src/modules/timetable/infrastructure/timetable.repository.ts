@@ -12,17 +12,45 @@ export class TimetableRepository {
     scope: { sql: string; params: unknown[] } = { sql: '', params: [] },
   ) {
     return this.dataSource.query(
-      `SELECT ts.id, ts.school_id as "schoolId", ts.academic_year_id as "academicYearId",
-              ts.course_assignment_id as "courseAssignmentId", ts.day_of_week as "dayOfWeek",
-              ts.start_time as "startTime", ts.end_time as "endTime", ts.venue,
-              (SELECT s.id FROM sessions s
-               WHERE s.timetable_slot_id = ts.id
-                 AND s.scheduled_date >= CURRENT_DATE
-                 AND s.status = 'scheduled'
-               ORDER BY s.scheduled_date ASC
-               LIMIT 1) as "nextSessionId"
+      `SELECT
+         ts.id,
+         ts.school_id        AS "schoolId",
+         ts.academic_year_id AS "academicYearId",
+         ts.course_assignment_id AS "courseAssignmentId",
+         ts.day_of_week      AS "dayOfWeek",
+         ts.start_time       AS "startTime",
+         ts.end_time         AS "endTime",
+         ts.venue,
+         -- Course
+         c.code              AS "courseCode",
+         c.title             AS "courseTitle",
+         -- Class
+         cl.id               AS "classId",
+         cl.name             AS "className",
+         -- Lecturer contact
+         lu.email            AS "lecturerEmail",
+         lp.full_name        AS "lecturerName",
+         lp.phone            AS "lecturerPhone",
+         -- Delegate contact (null when no delegate assigned)
+         du.email            AS "delegateEmail",
+         dp.full_name        AS "delegateName",
+         dp.phone            AS "delegatePhone",
+         -- Next upcoming scheduled session
+         (SELECT s.id FROM sessions s
+          WHERE s.timetable_slot_id = ts.id
+            AND s.scheduled_date >= CURRENT_DATE
+            AND s.status = 'scheduled'
+          ORDER BY s.scheduled_date ASC
+          LIMIT 1)           AS "nextSessionId"
        FROM timetable_slots ts
        JOIN course_assignments ca ON ca.id = ts.course_assignment_id
+       JOIN courses c            ON c.id   = ca.course_id
+       JOIN classes cl           ON cl.id  = ca.class_id
+       LEFT JOIN users lu        ON lu.id  = ca.lecturer_user_id
+       LEFT JOIN profiles lp     ON lp.id  = lu.id
+       LEFT JOIN students del    ON del.id = cl.delegate_student_id
+       LEFT JOIN users du        ON du.id  = del.user_id
+       LEFT JOIN profiles dp     ON dp.id  = du.id
        WHERE ts.school_id = $1 AND ($2::uuid IS NULL OR ts.academic_year_id = $2)
        ${scope.sql}
        ORDER BY ts.day_of_week, ts.start_time`,
